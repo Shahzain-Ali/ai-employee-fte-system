@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fte-project.local/schemas/log-entry.schema.json",
+  "title": "Log Entry Schema",
+  "description": "Schema for audit log entries in Logs/YYYY-MM-DD.json",
+  "type": "object",
+  "required": ["id", "timestamp", "action_type", "source", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier (UUID v4)"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when action occurred"
+    },
+    "action_type": {
+      "type": "string",
+      "enum": [
+        "file_detected",
+        "action_file_created",
+        "processing_started",
+        "processing_completed",
+        "processing_failed",
+        "approval_requested",
+        "approval_granted",
+        "approval_denied",
+        "file_moved",
+        "dashboard_updated"
+      ],
+      "description": "Type of action being logged"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["filesystem_watcher", "orchestrator", "claude_code", "system"],
+      "description": "Component that triggered the action"
+    },
+    "target_file": {
+      "type": "string",
+      "description": "Path to file being acted upon"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "failure", "pending_approval"],
+      "description": "Result of the action"
+    },
+    "details": {
+      "type": "object",
+      "description": "Additional context about the action",
+      "properties": {
+        "skill_used": { "type": "string" },
+        "file_count": { "type": "integer" },
+        "from_folder": { "type": "string" },
+        "to_folder": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "approval_status": {
+      "type": "string",
+      "enum": ["not_required", "pending", "approved", "rejected"],
+      "description": "Approval status for HITL actions"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Duration of action in milliseconds"
+    },
+    "error": {
+      "type": "string",
+      "description": "Error message if action failed"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "timestamp": "2026-02-17T10:30:00Z",
+      "action_type": "file_detected",
+      "source": "filesystem_watcher",
+      "target_file": "Inbox/invoice_january.pdf",
+      "status": "success",
+      "details": {
+        "file_size": 102400,
+        "file_type": "application/pdf"
+      },
+      "approval_status": "not_required"
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440001",
+      "timestamp": "2026-02-17T10:30:05Z",
+      "action_type": "action_file_created",
+      "source": "filesystem_watcher",
+      "target_file": "Needs_Action/FILE_invoice_january.pdf.md",
+      "status": "success",
+      "details": {
+        "original_file": "Inbox/invoice_january.pdf"
+      },
+      "approval_status": "not_required",
+      "duration_ms": 50
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440002",
+      "timestamp": "2026-02-17T10:31:00Z",
+      "action_type": "processing_started",
+      "source": "orchestrator",
+      "target_file": "Needs_Action/FILE_invoice_january.pdf.md",
+      "status": "success",
+      "details": {
+        "skill_used": "process_document"
+      },
+      "approval_status": "not_required"
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440003",
+      "timestamp": "2026-02-17T10:32:30Z",
+      "action_type": "processing_completed",
+      "source": "claude_code",
+      "target_file": "Done/FILE_invoice_january.pdf.md",
+      "status": "success",
+      "details": {
+        "skill_used": "process_document",
+        "from_folder": "Needs_Action/",
+        "to_folder": "Done/"
+      },
+      "approval_status": "not_required",
+      "duration_ms": 90000
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440004",
+      "timestamp": "2026-02-17T11:00:00Z",
+      "action_type": "approval_requested",
+      "source": "claude_code",
+      "target_file": "Pending_Approval/APPROVAL_payment_20260217T110000Z.md",
+      "status": "pending_approval",
+      "details": {
+        "action_type": "payment",
+        "amount": 150.00,
+        "reason": "Payment requires owner approval"
+      },
+      "approval_status": "pending"
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440005",
+      "timestamp": "2026-02-17T11:15:00Z",
+      "action_type": "processing_failed",
+      "source": "orchestrator",
+      "target_file": "Needs_Action/FILE_corrupted.md",
+      "status": "failure",
+      "error": "Claude Code timeout after 300 seconds",
+      "details": {
+        "retry_count": 1,
+        "message": "Max retries exceeded"
+      },
+      "approval_status": "not_required",
+      "duration_ms": 300000
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fte-project.local/schemas/action-file.schema.json",
+  "title": "Action File Schema",
+  "description": "Schema for action files in Needs_Action/ folder (YAML frontmatter)",
+  "type": "object",
+  "required": ["type", "original_name", "file_type", "detected_at", "status", "source"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["file_drop", "manual_task", "rejected_file"],
+      "description": "Action category"
+    },
+    "original_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[^/\\\\]+$",
+      "description": "Original filename without path separators"
+    },
+    "file_size": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "File size in bytes"
+    },
+    "file_type": {
+      "type": "string",
+      "minLength": 1,
+      "description": "MIME type or file extension",
+      "examples": ["application/pdf", ".pdf", "image/png"]
+    },
+    "detected_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when file was detected"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "processing", "completed", "failed"],
+      "description": "Current processing status"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "normal", "high"],
+      "default": "normal",
+      "description": "Task priority level"
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Where the action originated",
+      "examples": ["Inbox/", "manual"]
+    },
+    "processed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when processing completed"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error message if status is failed"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "type": "file_drop",
+      "original_name": "invoice_january.pdf",
+      "file_size": 102400,
+      "file_type": "application/pdf",
+      "detected_at": "2026-02-17T10:30:00Z",
+      "status": "pending",
+      "priority": "normal",
+      "source": "Inbox/"
+    },
+    {
+      "type": "rejected_file",
+      "original_name": "malware.exe",
+      "file_size": 524288,
+      "file_type": ".exe",
+      "detected_at": "2026-02-17T11:00:00Z",
+      "status": "completed",
+      "priority": "normal",
+      "source": "Inbox/",
+      "error_message": "Unsupported file type: executable files are not allowed"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+End-to-End Test Document
+========================
+
+This file was dropped into Inbox/ to test the full AI Employee pipeline.
+
+Key points:
+- Orchestrator should detect this via the watcher
+- Claude Code should summarize this document
+- A SUMMARY note should appear in Done/
+- Dashboard.md should update with a new timestamp
+
+Test date: 2026-02-18

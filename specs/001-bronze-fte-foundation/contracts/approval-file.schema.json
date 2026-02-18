@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fte-project.local/schemas/approval-file.schema.json",
+  "title": "Approval File Schema",
+  "description": "Schema for HITL approval files in Pending_Approval/ folder (YAML frontmatter)",
+  "type": "object",
+  "required": ["type", "action_type", "source_file", "created_at", "reason", "details"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "approval_request",
+      "description": "Always 'approval_request' for approval files"
+    },
+    "action_type": {
+      "type": "string",
+      "enum": ["payment", "email_send", "file_delete"],
+      "description": "Category of action requiring approval"
+    },
+    "source_file": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^Needs_Action/.+\\.md$",
+      "description": "Path to original action file in Needs_Action/"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when approval was requested"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Human-readable explanation of why approval is needed"
+    },
+    "details": {
+      "type": "object",
+      "description": "Action-specific details",
+      "oneOf": [
+        {
+          "title": "Payment Details",
+          "properties": {
+            "amount": { "type": "number", "minimum": 0 },
+            "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
+            "recipient": { "type": "string", "minLength": 1 },
+            "description": { "type": "string" }
+          },
+          "required": ["amount", "currency", "recipient"]
+        },
+        {
+          "title": "Email Details",
+          "properties": {
+            "to": { "type": "string", "format": "email" },
+            "subject": { "type": "string", "minLength": 1 },
+            "body_preview": { "type": "string", "maxLength": 200 }
+          },
+          "required": ["to", "subject"]
+        },
+        {
+          "title": "File Delete Details",
+          "properties": {
+            "file_path": { "type": "string", "minLength": 1 },
+            "file_size": { "type": "integer", "minimum": 0 },
+            "reason": { "type": "string" }
+          },
+          "required": ["file_path"]
+        }
+      ]
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when approved (set by system after owner moves file)"
+    },
+    "rejected_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when rejected (set by system after owner moves file)"
+    },
+    "decision_by": {
+      "type": "string",
+      "default": "owner",
+      "description": "Who made the approval/rejection decision"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "type": "approval_request",
+      "action_type": "payment",
+      "source_file": "Needs_Action/FILE_invoice_january.md",
+      "created_at": "2026-02-17T10:30:00Z",
+      "reason": "Payment request detected - all payments require approval per Company Handbook",
+      "details": {
+        "amount": 150.00,
+        "currency": "USD",
+        "recipient": "Acme Corp",
+        "description": "January invoice payment"
+      }
+    },
+    {
+      "type": "approval_request",
+      "action_type": "email_send",
+      "source_file": "Needs_Action/FILE_draft_email.md",
+      "created_at": "2026-02-17T11:00:00Z",
+      "reason": "Email to unknown contact - requires approval per Company Handbook",
+      "details": {
+        "to": "newvendor@example.com",
+        "subject": "Partnership Inquiry",
+        "body_preview": "Dear Sir/Madam, I am writing to inquire about..."
+      }
+    }
+  ]
+}

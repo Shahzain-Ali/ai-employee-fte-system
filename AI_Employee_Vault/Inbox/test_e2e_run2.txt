@@ -1,0 +1,13 @@
+End-to-End Test Document (Run 2)
+=================================
+
+This is the second end-to-end test for the AI Employee pipeline, verifying
+that the --dangerously-skip-permissions fix allows Claude to write files
+during subprocess execution.
+
+Key verification points:
+- SUMMARY_FILE_test_e2e_run2.txt.md should appear in Done/
+- Dashboard.md last updated timestamp should refresh
+- Logs/2026-02-18.json should contain a new processing_completed entry
+
+Test date: 2026-02-18
