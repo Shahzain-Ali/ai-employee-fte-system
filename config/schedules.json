@@ -1,0 +1,16 @@
+{
+  "schedules": [
+    {
+      "id": "ceo_briefing_weekly",
+      "task": "generate_ceo_briefing",
+      "cron": "0 22 * * 0",
+      "description": "Weekly CEO Briefing every Sunday at 10 PM"
+    },
+    {
+      "id": "audit_retention_daily",
+      "task": "cleanup_old_logs",
+      "cron": "0 3 * * *",
+      "description": "Daily audit log retention cleanup at 3 AM"
+    }
+  ]
+}

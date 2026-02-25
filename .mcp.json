@@ -1,0 +1,36 @@
+{
+  "mcpServers": {
+    "fte-email": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/mnt/e/hackathon-0/full-time-equivalent-project/src/mcp/index.js"
+      ],
+      "env": {}
+    },
+    "fte-odoo": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "src/mcp/odoo_server.py"
+      ],
+      "env": {}
+    },
+    "fte-facebook": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "src/mcp/facebook_server.py"
+      ],
+      "env": {}
+    },
+    "fte-instagram": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "src/mcp/instagram_server.py"
+      ],
+      "env": {}
+    }
+  }
+}

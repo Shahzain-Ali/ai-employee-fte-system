@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plan.schema.json",
+  "title": "Plan.md File",
+  "description": "Schema for PLAN_*.md reasoning scratchpad files",
+  "type": "object",
+  "required": [
+    "type",
+    "task",
+    "created_at",
+    "status",
+    "steps_total",
+    "steps_completed",
+    "requires_approval",
+    "updated_at"
+  ],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "plan",
+      "description": "Document type identifier"
+    },
+    "task": {
+      "type": "string",
+      "description": "Task description"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When plan was created"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["in_progress", "completed", "blocked"],
+      "description": "Plan execution status"
+    },
+    "source_file": {
+      "type": "string",
+      "description": "Action file that triggered this plan"
+    },
+    "steps_total": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Total number of steps"
+    },
+    "steps_completed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of completed steps"
+    },
+    "requires_approval": {
+      "type": "boolean",
+      "description": "Whether any step needs HITL approval"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last modification time"
+    }
+  }
+}

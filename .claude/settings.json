@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "command": "./scripts/ralph-wiggum-check.sh"
+      }
+    ]
+  }
+}

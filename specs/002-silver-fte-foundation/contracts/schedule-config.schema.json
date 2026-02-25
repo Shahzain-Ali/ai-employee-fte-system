@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schedule-config.schema.json",
+  "title": "Schedule Configuration",
+  "description": "Schema for APScheduler task scheduling configuration",
+  "type": "object",
+  "required": ["schedules"],
+  "properties": {
+    "schedules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "task", "enabled", "description"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z_]+$",
+            "description": "Unique schedule identifier"
+          },
+          "task": {
+            "type": "string",
+            "description": "Task function name to execute"
+          },
+          "cron": {
+            "type": "string",
+            "pattern": "^[0-9*,/-]+ [0-9*,/-]+ [0-9*,/-]+ [0-9*,/-]+ [0-9*,/-]+$",
+            "description": "Cron expression (minute hour day month weekday)"
+          },
+          "interval_minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Interval in minutes between runs"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether schedule is active"
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description"
+          }
+        },
+        "oneOf": [
+          { "required": ["cron"] },
+          { "required": ["interval_minutes"] }
+        ]
+      }
+    }
+  }
+}

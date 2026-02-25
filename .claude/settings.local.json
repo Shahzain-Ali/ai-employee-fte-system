@@ -1,0 +1,6 @@
+{
+  "enabledMcpjsonServers": [
+    "fte-email"
+  ],
+  "enableAllProjectMcpServers": true
+}

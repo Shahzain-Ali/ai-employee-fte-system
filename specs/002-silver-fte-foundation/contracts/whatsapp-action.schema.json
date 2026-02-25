@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "whatsapp-action.schema.json",
+  "title": "WhatsApp Action File",
+  "description": "Schema for WA_*.md action files created by WhatsApp Watcher",
+  "type": "object",
+  "required": [
+    "type",
+    "sender",
+    "chat_type",
+    "message",
+    "timestamp",
+    "detected_at",
+    "keywords_matched",
+    "status"
+  ],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "whatsapp",
+      "description": "Action type identifier"
+    },
+    "sender": {
+      "type": "string",
+      "description": "Sender phone number or identifier"
+    },
+    "sender_name": {
+      "type": "string",
+      "description": "Contact name if available"
+    },
+    "chat_type": {
+      "type": "string",
+      "enum": ["individual", "group"],
+      "description": "Type of chat"
+    },
+    "group_name": {
+      "type": "string",
+      "description": "Group name if chat_type is group"
+    },
+    "message": {
+      "type": "string",
+      "description": "Full message text"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Message timestamp (ISO 8601)"
+    },
+    "detected_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When watcher detected message"
+    },
+    "keywords_matched": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "description": "Keywords that triggered detection"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "processing", "completed", "failed"],
+      "description": "Processing status"
+    },
+    "has_media": {
+      "type": "boolean",
+      "description": "Whether message contains media"
+    }
+  }
+}

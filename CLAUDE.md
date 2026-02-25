@@ -212,6 +212,12 @@ See `.specify/memory/constitution.md` for code quality, testing, performance, se
 ## Active Technologies
 - Python 3.14.3 (WSL) — managed via `uv` + watchdog (file system events), pathlib (file operations), (001-bronze-fte-foundation)
 - Local filesystem (Obsidian vault) — markdown files for data, JSON for logs (001-bronze-fte-foundation)
+- google-api-python-client + OAuth2 — Gmail API integration (002-silver-fte-foundation)
+- Playwright + playwright-stealth — WhatsApp Web & LinkedIn automation (002-silver-fte-foundation)
+- APScheduler + SQLAlchemy — Task scheduling with SQLite persistence (002-silver-fte-foundation)
+- MCP (Model Context Protocol) — Claude tool integration for email sending (002-silver-fte-foundation)
 
 ## Recent Changes
+- 003-gold-fte-autonomous: Odoo Docker (JSON-RPC), Facebook MCP (Meta Graph API), Instagram MCP (Meta Graph API), cross-domain workflows, CEO Briefing, audit logging, error recovery, Ralph Wiggum loop, multiple MCP servers
+- 002-silver-fte-foundation: Added Gmail watcher (OAuth2), WhatsApp watcher (Playwright), LinkedIn automation, MCP email server, APScheduler
 - 001-bronze-fte-foundation: Added Python 3.14.3 (WSL) — managed via `uv` + watchdog (file system events), pathlib (file operations),

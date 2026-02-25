@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mcp-send-email.schema.json",
+  "title": "MCP send_email Tool",
+  "description": "Schema for MCP email server send_email tool input/output",
+  "definitions": {
+    "SendEmailInput": {
+      "type": "object",
+      "required": ["to", "subject", "body"],
+      "properties": {
+        "to": {
+          "type": "string",
+          "format": "email",
+          "description": "Recipient email address"
+        },
+        "cc": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "email"
+          },
+          "description": "CC recipients"
+        },
+        "bcc": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "email"
+          },
+          "description": "BCC recipients"
+        },
+        "subject": {
+          "type": "string",
+          "description": "Email subject line"
+        },
+        "body": {
+          "type": "string",
+          "description": "Email body content"
+        },
+        "body_type": {
+          "type": "string",
+          "enum": ["plain", "html"],
+          "default": "plain",
+          "description": "Body content type"
+        },
+        "attachment": {
+          "type": "string",
+          "description": "Path to attachment file"
+        },
+        "reply_to_message_id": {
+          "type": "string",
+          "description": "Gmail message ID to reply to"
+        }
+      }
+    },
+    "SendEmailOutput": {
+      "type": "object",
+      "required": ["success"],
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "description": "Whether email was sent successfully"
+        },
+        "message_id": {
+          "type": "string",
+          "description": "Gmail message ID of sent email"
+        },
+        "thread_id": {
+          "type": "string",
+          "description": "Gmail thread ID"
+        },
+        "error": {
+          "type": "string",
+          "description": "Error message if failed"
+        },
+        "sent_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when email was sent"
+        }
+      }
+    }
+  }
+}
