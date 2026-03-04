@@ -10,25 +10,51 @@
     },
     "fte-odoo": {
       "type": "stdio",
-      "command": "python",
+      "command": "uv",
       "args": [
+        "run",
+        "python",
         "src/mcp/odoo_server.py"
       ],
       "env": {}
     },
     "fte-facebook": {
       "type": "stdio",
-      "command": "python",
+      "command": "uv",
       "args": [
+        "run",
+        "python",
         "src/mcp/facebook_server.py"
       ],
       "env": {}
     },
     "fte-instagram": {
       "type": "stdio",
-      "command": "python",
+      "command": "uv",
       "args": [
+        "run",
+        "python",
         "src/mcp/instagram_server.py"
+      ],
+      "env": {}
+    },
+    "fte-twitter": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "src/mcp/twitter_server.py"
+      ],
+      "env": {}
+    },
+    "fte-linkedin": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "src/mcp/linkedin_server.py"
       ],
       "env": {}
     }

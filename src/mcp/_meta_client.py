@@ -23,7 +23,7 @@ class MetaGraphClient:
 
     BASE_URL = "https://graph.facebook.com"
 
-    def __init__(self, access_token: str, api_version: str = "v21.0"):
+    def __init__(self, access_token: str, api_version: str = "v25.0"):
         self.access_token = access_token
         self.api_version = api_version
         self._base = f"{self.BASE_URL}/{self.api_version}"

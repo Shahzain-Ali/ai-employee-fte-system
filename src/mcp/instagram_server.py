@@ -23,7 +23,7 @@ def _get_client():
     if _client is None:
         from src.mcp._meta_client import MetaGraphClient
         token = os.getenv("IG_ACCESS_TOKEN", "")
-        version = os.getenv("META_API_VERSION", "v21.0")
+        version = os.getenv("META_API_VERSION", "v25.0")
         if not token:
             raise RuntimeError("IG_ACCESS_TOKEN not set in environment")
         _client = MetaGraphClient(access_token=token, api_version=version)
