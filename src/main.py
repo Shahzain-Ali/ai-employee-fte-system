@@ -28,6 +28,8 @@ def main():
         _run_whatsapp()
     elif command == "briefing":
         _run_briefing()
+    elif command == "dashboard":
+        _run_dashboard()
     elif command == "help":
         _print_help()
     else:
@@ -182,6 +184,14 @@ def _run_briefing():
     print(f"CEO Briefing generated: {path}")
 
 
+def _run_dashboard():
+    """Start the Streamlit dashboard."""
+    import subprocess
+    dashboard_path = Path(__file__).resolve().parent / "dashboard" / "app.py"
+    print(f"Starting Dashboard at: {dashboard_path}")
+    subprocess.run(["streamlit", "run", str(dashboard_path)])
+
+
 def _print_help():
     print("Personal AI Employee — Gold Tier Autonomous Employee")
     print()
@@ -196,6 +206,7 @@ def _print_help():
     print("  whatsapp --start     Run WhatsApp watcher continuously")
     print("  briefing             Manually trigger CEO Briefing")
     print("  briefing YYYY-MM-DD  Generate briefing for specific week start")
+    print("  dashboard            Start Streamlit dashboard")
     print("  help                 Show this help message")
     print()
     print("Usage:")
@@ -205,6 +216,7 @@ def _print_help():
     print("  python -m src.main whatsapp --setup")
     print("  python -m src.main whatsapp --once")
     print("  python -m src.main briefing")
+    print("  python -m src.main dashboard")
     print("  python -m src.main run")
 
 
