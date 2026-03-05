@@ -89,7 +89,7 @@ def _count_pending(vault_path: Path) -> int:
     needs_action = vault_path / "Needs_Action"
     if not needs_action.exists():
         return 0
-    prefixes = ("FILE_", "EMAIL_", "WA_", "ODOO_", "FB_", "IG_")
+    prefixes = ("FILE_", "EMAIL_", "WA_", "ODOO_", "FB_", "IG_", "TW_", "LI_")
     return sum(
         1 for f in needs_action.iterdir()
         if f.is_file() and f.suffix == ".md" and any(f.name.startswith(p) for p in prefixes)
@@ -203,7 +203,7 @@ def _get_platform_stats(vault_path: Path) -> str:
 
     today = datetime.now(timezone.utc).date()
     counts = {"Email": 0, "WhatsApp": 0, "File": 0, "Approval": 0,
-              "Odoo": 0, "Facebook": 0, "Instagram": 0}
+              "Odoo": 0, "Facebook": 0, "Instagram": 0, "Twitter": 0, "LinkedIn": 0}
 
     for f in done.iterdir():
         if not f.is_file() or f.suffix != ".md":
@@ -222,6 +222,10 @@ def _get_platform_stats(vault_path: Path) -> str:
             counts["Facebook"] += 1
         elif name.startswith("IG_") or name.startswith("SUMMARY_IG_"):
             counts["Instagram"] += 1
+        elif name.startswith("TW_") or name.startswith("SUMMARY_TW_"):
+            counts["Twitter"] += 1
+        elif name.startswith("LI_") or name.startswith("SUMMARY_LI_"):
+            counts["LinkedIn"] += 1
         elif name.startswith("APPROVAL_"):
             counts["Approval"] += 1
         elif name.startswith("FILE_") or name.startswith("SUMMARY_"):

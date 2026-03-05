@@ -134,7 +134,7 @@ SILVER TIER (Internet Connected):
 > Bronze mein AI Employee andha tha — sirf Inbox/ folder mein file aaye to dekhta tha.
 > Silver mein usko do naye "aankh" mil gayi — Gmail aur WhatsApp.
 > Aur "haath" bhi mil gaye — ab sirf padhta nahi, email bhej bhi sakta hai.
-> Lekin — har important kaam se pehle TUMSE poochta hai. Koi bhi bada kaam
+> Lekin — har important kaam se pehle AAP se poochta hai. Koi bhi bada kaam
 > bina approval ke nahi hoga.
 
 ---
@@ -347,7 +347,7 @@ Claude can: Read files, Write files, Think + SEND EMAILS + CREATE DRAFTS
 
 > **Roman Urdu Example:**
 > Bronze mein Claude ka sirf dimaag tha — soch sakta tha, likh sakta tha, lekin
-> kuch bhej nahi sakta tha. Email bhejna ho to tumhe manually karna padta tha.
+> kuch bhej nahi sakta tha. Email bhejna ho to aapko manually karna padta tha.
 >
 > MCP = Claude ke haath. Ab Claude direct Gmail API ko call karke email bhej sakta hai.
 > "send_email_tool" call karo → email chali gayi.
@@ -503,7 +503,7 @@ Silver is different — Claude performs **irreversible real-world actions**:
 > **Roman Urdu Example:**
 > Bronze mein agar Claude galat file bana de — delete karo, dubara banao. Koi nuqsaan nahi.
 > Silver mein agar Claude galat email bhej de client ko — wapas nahi aa sakti.
-> Isliye HITL (Human-in-the-Loop) = koi bhi bada kaam karne se pehle TUM se poochna.
+> Isliye HITL (Human-in-the-Loop) = koi bhi bada kaam karne se pehle AAP se poochna.
 
 ### Approval Flow (File-Based)
 
@@ -1445,7 +1445,7 @@ PLATINUM (Future)
 > Silver mein aapne AI Employee ko "aankhein" (Gmail, WhatsApp watchers) aur
 > "haath" (MCP email server) diye. Ab woh bahar ki duniya se connect hai.
 >
-> Lekin abhi bhi har important kaam ke liye TUM se poochta hai — HITL.
+> Lekin abhi bhi har important kaam ke liye AAP se poochta hai — HITL.
 > Gold mein "dimaag" powerful hoga — Claude khud sochega, chains banaye ga,
 > CEO briefing generate karega. Aap sirf weekly review karein.
 >

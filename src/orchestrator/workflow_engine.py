@@ -169,6 +169,8 @@ class WorkflowEngine:
             "odoo": "ODOO",
             "facebook": "FB",
             "instagram": "IG",
+            "twitter": "TW",
+            "linkedin": "LI",
             "email": "EMAIL",
         }
         prefix = prefix_map.get(step.domain, step.domain.upper())

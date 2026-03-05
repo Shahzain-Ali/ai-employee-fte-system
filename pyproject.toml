@@ -17,6 +17,7 @@ dependencies = [
     "playwright-stealth>=1.0.6",
     "mcp[cli]>=1.26.0",
     "requests>=2.31.0",
+    "pdfplumber>=0.11.9",
 ]
 
 [project.optional-dependencies]

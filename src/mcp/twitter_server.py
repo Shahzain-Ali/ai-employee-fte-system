@@ -20,16 +20,17 @@ mcp = FastMCP("fte-twitter")
 _bot = None
 
 
-def _get_bot():
+async def _get_bot():
     """Get or create the Twitter Playwright bot instance."""
     global _bot
     if _bot is None:
         from src.playwright.twitter_bot import TwitterBot
         headless = os.getenv("TWITTER_HEADLESS", "true").lower() == "true"
-        _bot = TwitterBot(headless=headless)
-        _bot.start()
+        bot = TwitterBot(headless=headless)
+        await bot.start()
 
-        if not _bot.is_logged_in():
+        if not await bot.is_logged_in():
+            await bot.stop()
             logger.error("Twitter bot is NOT logged in. Run setup first: "
                          "uv run python src/playwright/twitter_bot.py login")
             raise RuntimeError(
@@ -38,32 +39,21 @@ def _get_bot():
                 "This opens a browser for manual login. Session is saved for reuse."
             )
 
+        _bot = bot
         logger.info("Twitter bot initialized and logged in")
-        atexit.register(_cleanup)
     return _bot
 
 
-def _cleanup():
-    """Cleanup bot on exit."""
-    global _bot
-    if _bot:
-        try:
-            _bot.stop()
-        except Exception:
-            pass
-        _bot = None
-
-
 @mcp.tool()
-def post_tweet(text: str) -> str:
+async def post_tweet(text: str) -> str:
     """Post a new tweet on Twitter/X.
 
     Args:
         text: Tweet content (max 280 characters).
     """
     try:
-        bot = _get_bot()
-        result = bot.post_tweet(text)
+        bot = await _get_bot()
+        result = await bot.post_tweet(text)
         if result["status"] == "success":
             return f"Tweet posted successfully: {text[:100]}"
         return f"Error posting tweet: {result['message']}"
@@ -73,15 +63,15 @@ def post_tweet(text: str) -> str:
 
 
 @mcp.tool()
-def get_my_tweets(limit: int = 10) -> str:
+async def get_my_tweets(limit: int = 10) -> str:
     """Get recent tweets from the logged-in user's profile.
 
     Args:
         limit: Maximum number of tweets to return.
     """
     try:
-        bot = _get_bot()
-        result = bot.get_my_tweets(limit=limit)
+        bot = await _get_bot()
+        result = await bot.get_my_tweets(limit=limit)
         if result["status"] == "success":
             return json.dumps(result["tweets"], indent=2)
         return f"Error getting tweets: {result['message']}"
@@ -91,7 +81,7 @@ def get_my_tweets(limit: int = 10) -> str:
 
 
 @mcp.tool()
-def reply_to_tweet(tweet_url: str, text: str) -> str:
+async def reply_to_tweet(tweet_url: str, text: str) -> str:
     """Reply to a specific tweet on Twitter/X.
 
     Args:
@@ -99,8 +89,8 @@ def reply_to_tweet(tweet_url: str, text: str) -> str:
         text: Reply content.
     """
     try:
-        bot = _get_bot()
-        result = bot.reply_to_tweet(tweet_url, text)
+        bot = await _get_bot()
+        result = await bot.reply_to_tweet(tweet_url, text)
         if result["status"] == "success":
             return f"Reply posted successfully to {tweet_url}"
         return f"Error replying: {result['message']}"
@@ -110,15 +100,15 @@ def reply_to_tweet(tweet_url: str, text: str) -> str:
 
 
 @mcp.tool()
-def like_tweet(tweet_url: str) -> str:
+async def like_tweet(tweet_url: str) -> str:
     """Like a specific tweet on Twitter/X.
 
     Args:
         tweet_url: Full URL of the tweet to like.
     """
     try:
-        bot = _get_bot()
-        result = bot.like_tweet(tweet_url)
+        bot = await _get_bot()
+        result = await bot.like_tweet(tweet_url)
         if result["status"] == "success":
             return f"Tweet liked: {tweet_url}"
         return f"Error liking tweet: {result['message']}"

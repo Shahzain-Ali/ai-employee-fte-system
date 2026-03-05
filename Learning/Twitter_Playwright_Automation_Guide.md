@@ -1,8 +1,8 @@
 # Twitter/X Automation — Playwright Setup Guide
 
-**Date:** 2026-03-04
+**Date:** 2026-03-04 (Updated: 2026-03-05)
 **Author:** Shahzain Bangash + Claude Opus 4.6
-**Status:** WORKING — Tweet post tested successfully
+**Status:** WORKING — Tweet post via MCP server (headless Firefox) tested successfully
 **Method:** Playwright (Browser Automation) — No paid API needed
 
 ---
@@ -31,11 +31,38 @@ $0 credits pe API kaam nahi karta — isliye Playwright approach.
 
 | Action | Status |
 |--------|--------|
-| Post Tweet | WORKING |
+| Post Tweet | WORKING (MCP + headless) |
 | Reply to Tweet | Built (needs testing) |
 | Like a Tweet | Built (needs testing) |
-| Get My Tweets | Built (needs testing) |
-| Login Session Persistence | WORKING |
+| Get My Tweets | Built (headless scraping unreliable) |
+| Login Session Persistence | WORKING (Chromium login → cookie export → Firefox headless) |
+| MCP Server Integration | WORKING |
+
+---
+
+## Architecture: Dual Browser Approach
+
+Twitter/X headless Chromium ko block karta hai (blank page dikhata hai). Isliye hum **dual browser** approach use karte hain:
+
+```
+LOGIN (one-time):
+  Chromium (non-headless, visible) → User manually logs in → Cookies exported to JSON
+
+MCP OPERATIONS (automated, headless):
+  Firefox (headless) → Cookies injected from JSON → Tweet/Reply/Like
+```
+
+### Why This Works
+- **Chromium headless** → X.com detects aur blank page dikhata hai (title empty, no DOM)
+- **Firefox headless** → X.com allow karta hai, page properly load hota hai
+- **Cookie injection** → Login ek baar Chromium mein, cookies file mein save, Firefox reuse karta hai
+
+### Session Files
+```
+.sessions/twitter/          → Chromium session (login ke liye)
+.sessions/twitter-ff2/      → Firefox session (MCP headless ke liye)
+.sessions/twitter_cookies.json → Exported cookies (Chromium → Firefox bridge)
+```
 
 ---
 
@@ -45,7 +72,8 @@ $0 credits pe API kaam nahi karta — isliye Playwright approach.
 
 ```bash
 uv pip install playwright playwright-stealth
-PLAYWRIGHT_BROWSERS_PATH=0 uv run playwright install chromium
+uv run playwright install chromium
+uv run playwright install firefox
 ```
 
 ### Step 2: Twitter Developer Console Setup (Optional — for API fallback)
@@ -74,17 +102,28 @@ uv run python src/playwright/twitter_bot.py login
 
 - Chromium browser khulega
 - **x.com homepage** khulega (login page nahi — less suspicious)
-- **IMPORTANT: "Sign in with Google" mat click karo** — Google block karega
-- Instead: **"Sign up" se email add karo** ya **username + password se login karo**
+- Login karo (username + password ya "Sign in with Google")
 - Login hone ke baad URL `x.com/home` pe redirect hoga
-- Script detect karegi aur session save karegi
-- Session saved in `.sessions/twitter/`
-- **Next time login ki zaroorat nahi**
+- Script detect karegi, **cookies auto-export** karegi, aur session save karegi
+- **Next time login ki zaroorat nahi** (jab tak cookies expire na hon)
 
-### Step 4: Test Tweet
+### Step 4: Test Tweet (Direct Script)
 
 ```bash
-uv run python src/playwright/twitter_bot.py post "Your tweet text here"
+uv run python -c "
+import asyncio
+from src.playwright.twitter_bot import TwitterBot
+
+async def test():
+    bot = TwitterBot(headless=True)
+    await bot.start()
+    if await bot.is_logged_in():
+        result = await bot.post_tweet('Your tweet text here')
+        print(result)
+    await bot.stop()
+
+asyncio.run(test())
+"
 ```
 
 ### Step 5: MCP Server (Claude Code Integration)
@@ -99,7 +138,7 @@ MCP server registered in `.mcp.json`:
 ```
 
 After setup, Claude Code mein bolo:
-> "Tweet karo: Hello World!"
+> "Post a tweet: Hello World!"
 
 ---
 
@@ -107,9 +146,11 @@ After setup, Claude Code mein bolo:
 
 | File | Purpose |
 |------|---------|
-| `src/playwright/twitter_bot.py` | Twitter browser automation bot |
-| `src/mcp/twitter_server.py` | MCP server for Claude Code integration |
-| `.sessions/twitter/` | Browser session data (login persistence) |
+| `src/playwright/twitter_bot.py` | Twitter browser automation bot (async, dual-browser) |
+| `src/mcp/twitter_server.py` | MCP server for Claude Code integration (async) |
+| `.sessions/twitter/` | Chromium session data (login) |
+| `.sessions/twitter-ff2/` | Firefox session data (headless operations) |
+| `.sessions/twitter_cookies.json` | Exported cookies (bridge between browsers) |
 
 ---
 
@@ -143,66 +184,190 @@ PLAYWRIGHT_BROWSERS_PATH=0 uv run playwright install chromium
 **Cause:** Windows Chrome executable cannot run with Playwright's remote debugging from WSL
 **Solution:** Use Playwright's own Chromium, not Windows Chrome. Remove `executable_path` and `channel` options.
 
-### Problem 6: Firefox path not found
-**Error:** `Executable doesn't exist at /home/.../.cache/ms-playwright/firefox-1509`
-**Cause:** Firefox installed with `PLAYWRIGHT_BROWSERS_PATH=0` (local) but code looks in global cache
-**Solution:** Stay with Chromium (same as WhatsApp watcher). Firefox not needed — Chromium + Stealth works fine.
-
-### Problem 7: Login detection not working — "Still waiting..."
+### Problem 6: Login detection not working — "Still waiting..."
 **Error:** Script keeps saying "Still waiting..." even after successful login
 **Cause:** `is_logged_in()` using DOM selectors that don't match current Twitter UI
 **Solution:** URL-based detection:
 ```python
-# Check if URL contains /home (means logged in)
 if "/home" in current_url:
     return True
 ```
 
-### Problem 8: Twitter Developer Console — no Free tier option
+### Problem 7: Twitter Developer Console — no Free tier option
 **Error:** No "Free" or "Downgrade" option in developer.x.com
 **Cause:** New accounts (Feb 2026+) default to Pay-Per-Use. Free tier no longer available for new developers.
 **Solution:** Either buy $5 credits or use Playwright (free).
 
-### Problem 9: Twitter auth setup — "Not a valid URL format"
+### Problem 8: Twitter auth setup — "Not a valid URL format"
 **Error:** Optional URL fields in Twitter app settings can't be left empty
 **Cause:** Twitter requires valid URL format even for optional fields
 **Solution:** Use `https://example.com` for Callback URL and Website URL.
+
+### Problem 9: MCP Server — "Playwright Sync API inside asyncio loop"
+**Error:** `Error: It looks like you are using Playwright Sync API inside the asyncio loop. Please use the Async API instead.`
+**Cause:** FastMCP runs inside an async event loop, but bot was using `sync_playwright()` and synchronous methods.
+**Solution:** Convert entire bot from sync to async:
+```python
+# BEFORE (broken with MCP):
+from playwright.sync_api import sync_playwright
+self._playwright = sync_playwright().start()
+self._page.goto(url)
+
+# AFTER (works with MCP):
+from playwright.async_api import async_playwright
+self._playwright = await async_playwright().start()
+await self._page.goto(url)
+```
+All bot methods changed to `async def`, all Playwright calls prefixed with `await`.
+
+### Problem 10: MCP Server — broken bot instance cached after login failure
+**Error:** `'NoneType' object has no attribute 'goto'` on second MCP call
+**Cause:** `_get_bot()` set global `_bot` before login check. If login failed, broken instance stayed cached.
+**Solution:** Use local variable, only assign to global after successful login:
+```python
+async def _get_bot():
+    global _bot
+    if _bot is None:
+        bot = TwitterBot(headless=True)  # local variable
+        await bot.start()
+        if not await bot.is_logged_in():
+            await bot.stop()  # cleanup
+            raise RuntimeError("Not logged in")
+        _bot = bot  # only assign after success
+    return _bot
+```
+
+### Problem 11: Headless Chromium — X.com shows blank page
+**Error:** Page loads but title empty, no DOM elements, body text empty
+**Cause:** Twitter/X aggressively detects headless Chromium and serves blank page. Extra stealth flags (`--disable-blink-features`, custom user-agent, `--headless=new`) all failed.
+**Solution:** **Use Firefox headless instead.** Firefox headless is not detected by X.com:
+```python
+# Chromium headless → BLANK PAGE (blocked)
+ctx = await pw.chromium.launch_persistent_context(headless=True, ...)
+# Page: title="", body="", no elements
+
+# Firefox headless → WORKS
+ctx = await pw.firefox.launch_persistent_context(headless=True, ...)
+# Page: title="X. It's what's happening / X", full DOM
+```
+
+### Problem 12: Firefox persistent context — session not preserved in headless
+**Error:** Login done in Firefox non-headless, but headless Firefox shows "Sign up" page (not logged in)
+**Cause:** Firefox persistent context doesn't reliably restore cookies between headless/non-headless sessions
+**Solution:** **Cookie injection approach** — Login in Chromium (reliable session), export cookies to JSON, inject into Firefox headless:
+```python
+# Export from Chromium:
+cookies = await chromium_context.cookies()
+Path('cookies.json').write_text(json.dumps(cookies))
+
+# Inject into Firefox:
+cookies = json.loads(Path('cookies.json').read_text())
+await firefox_context.add_cookies(filtered_cookies)
+```
+
+### Problem 13: Firefox non-headless crash in WSL
+**Error:** `BrowserType.launch_persistent_context: Failed to launch the browser process.` (exit code 0)
+**Cause:** Firefox non-headless needs a display server (X11/Wayland), WSL doesn't have one by default
+**Solution:** Use Chromium for non-headless login (works in WSL), Firefox only for headless MCP operations. This is why we have the dual-browser architecture.
+
+### Problem 14: `is_logged_in()` returns True on `about:blank`
+**Error:** Bot reports logged in but page is at `about:blank` with no content
+**Cause:** Old check: if URL doesn't contain `/login` → assume logged in. `about:blank` passes this check.
+**Solution:** Navigate first, then check:
+```python
+async def is_logged_in(self):
+    await self._page.goto("https://x.com", ...)
+    await asyncio.sleep(5)
+    # Check for "Sign in" link = NOT logged in
+    sign_in = await self._page.query_selector('a[href="/login"]')
+    if sign_in:
+        return False
+    # Check for /home redirect = logged in
+    if "/home" in self._page.url:
+        return True
+```
+
+### Problem 15: Post button click intercepted by overlay
+**Error:** `ElementHandle.click: Timeout 30000ms exceeded — element is visible, enabled and stable — but another element intercepts click`
+**Cause:** Cookie banner, notification popup, or "Subscribe to Premium" overlay covers the Post button
+**Solution:** Use JavaScript `document.querySelector().click()` instead of Playwright click:
+```python
+# BEFORE (blocked by overlay):
+await post_btn.click()
+
+# AFTER (bypasses overlay):
+await self._page.evaluate(
+    'document.querySelector(\'button[data-testid="tweetButton"]\').click()'
+)
+```
+
+### Problem 16: Tweet "posted successfully" but not appearing on profile
+**Error:** Bot returns success, MCP returns success, but tweet not visible on X.com profile
+**Cause:** `force=True` click was used which bypasses actionability checks — button was clicked but event didn't register properly
+**Solution:** Combined fix:
+1. Wait for button to be enabled before clicking
+2. Use JavaScript click (reliable in Firefox)
+3. Verify redirect away from `/compose` URL after click
+```python
+# Wait for enabled
+for _ in range(10):
+    if await post_btn.is_enabled():
+        break
+    await asyncio.sleep(0.5)
+
+# JavaScript click
+await self._page.evaluate('document.querySelector(...).click()')
+
+# Verify
+if "/compose" not in self._page.url:
+    return {"status": "success", ...}
+```
 
 ---
 
 ## Key Technical Details
 
-### Browser Launch (Anti-Detection Config)
+### Dual-Browser Architecture
 ```python
-self._context = self._playwright.chromium.launch_persistent_context(
-    user_data_dir=str(self._session_path),
-    headless=self._headless,
-    args=[
-        "--disable-blink-features=AutomationControlled",
-        "--no-sandbox",
-        "--disable-infobars",
-        "--disable-dev-shm-usage",
-        "--no-first-run",
-    ],
+# LOGIN MODE (headless=False) → Chromium
+self._context = await self._playwright.chromium.launch_persistent_context(
+    user_data_dir=str(self._chromium_session),
+    headless=False,
+    args=["--disable-blink-features=AutomationControlled", "--no-sandbox", ...],
     ignore_default_args=["--enable-automation"],
-    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ...",
+    user_agent="Mozilla/5.0 ... Chrome/131.0.0.0 ...",
 )
-stealth = Stealth()
-stealth.apply_stealth_sync(self._context)
+# After login → cookies exported to .sessions/twitter_cookies.json
+
+# MCP MODE (headless=True) → Firefox
+self._context = await self._playwright.firefox.launch_persistent_context(
+    user_data_dir=str(self._firefox_session),
+    headless=True,
+    user_agent="Mozilla/5.0 ... Firefox/131.0",
+    viewport={"width": 1920, "height": 1080},
+)
+# Cookies injected from .sessions/twitter_cookies.json
 ```
 
-**Key difference from LinkedIn/WhatsApp:**
-- `ignore_default_args=["--enable-automation"]` — removes automation flag
-- Custom `user_agent` — mimics real Chrome
-- These extra flags needed because Twitter has stricter bot detection than LinkedIn
+### Cookie Injection Flow
+```python
+# Filter only X.com cookies from exported file
+x_cookies = [c for c in all_cookies
+             if ".x.com" in c["domain"] or "twitter" in c["domain"]]
+
+# Inject into Firefox context
+await self._context.add_cookies(x_cookies)
+```
 
 ### Twitter Post Flow (DOM Selectors)
 ```
-1. Navigate to: https://x.com/compose/post
-2. Find compose box: div[data-testid="tweetTextarea_0"]
-3. Type text with delay=30ms per character
-4. Find Post button: button[data-testid="tweetButton"]
-5. Click Post → wait 3 seconds
+1. Navigate to: https://x.com/home (dismiss overlays)
+2. Navigate to: https://x.com/compose/post
+3. Find compose box: div[data-testid="tweetTextarea_0"]
+4. Type text with delay=30ms per character
+5. Wait for Post button enabled: button[data-testid="tweetButton"]
+6. JavaScript click: document.querySelector('button[data-testid="tweetButton"]').click()
+7. Verify URL changed from /compose (confirms tweet sent)
 ```
 
 ### Twitter Developer App Details
@@ -210,19 +375,20 @@ stealth.apply_stealth_sync(self._context)
 - App ID: 32509232
 - Plan: Pay Per Use
 - Credits: $0.00 (not purchased)
-- Twitter Handle: @Shahzainali604
+- Twitter Handle: @ShahzainAl81729
 - User Auth: Read and Write + Web App
 
 ---
 
 ## Testing Checklist
 
-- [x] `uv run python src/playwright/twitter_bot.py login` — session saved (via sign up flow)
-- [x] `uv run python src/playwright/twitter_bot.py post "test"` — tweet posted
-- [ ] Reply to tweet — needs testing
-- [ ] Like a tweet — needs testing
-- [ ] MCP server via Claude Code — needs testing
-- [ ] Headless mode — needs testing
+- [x] `uv run python src/playwright/twitter_bot.py login` — Chromium login + cookie export
+- [x] Firefox headless login check — cookies injected, is_logged_in=True
+- [x] Direct script tweet post (headless Firefox) — tweet posted and verified on X.com
+- [x] MCP server `post_tweet` via Claude Code — tweet posted successfully
+- [x] MCP server `get_my_tweets` — connected (returns empty due to headless scraping limits)
+- [ ] Reply to tweet via MCP — needs testing
+- [ ] Like a tweet via MCP — needs testing
 
 ---
 
@@ -230,9 +396,12 @@ stealth.apply_stealth_sync(self._context)
 
 | Feature | Twitter/X | LinkedIn |
 |---------|-----------|----------|
-| Bot Detection | Very strict | Moderate |
-| Login Method | Sign up flow (workaround) | Direct email + password |
-| Extra Anti-Detection | `ignore_default_args`, custom user_agent | Standard Stealth only |
+| Bot Detection | Very strict (blocks headless Chromium) | Moderate (headless Chromium works) |
+| Headless Browser | Firefox (Chromium blocked) | Chromium |
+| Login Method | Chromium non-headless → cookie export | Chromium headless (session persists) |
+| Cookie Bridge | Required (Chromium → JSON → Firefox) | Not needed |
+| Extra Anti-Detection | Dual-browser, JS click, overlay dismiss | Standard Stealth only |
 | Post Selector | `data-testid="tweetTextarea_0"` | `div.ql-editor` (Quill) |
-| Post Button | `data-testid="tweetButton"` | `share-actions__primary-action` |
+| Post Button | `data-testid="tweetButton"` (JS click) | `share-actions__primary-action` |
 | Compose URL | `x.com/compose/post` | Feed page modal |
+| Async API | Required (MCP async loop) | Required (MCP async loop) |

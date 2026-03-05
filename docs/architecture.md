@@ -6,19 +6,20 @@
                     ┌─────────────────────────────────────┐
                     │         Claude Code (CLI)            │
                     │  ┌──────────┐  ┌──────────────────┐ │
-                    │  │  Skills  │  │  MCP Servers (4)  │ │
+                    │  │  Skills  │  │  MCP Servers (6)  │ │
                     │  └──────────┘  └──────────────────┘ │
                     └──────────┬──────────────┬───────────┘
                                │              │
-         ┌─────────────────────┤              ├─────────────────────┐
-         │                     │              │                     │
-    ┌────▼────┐          ┌─────▼─────┐  ┌─────▼─────┐        ┌─────▼─────┐
-    │fte-email│          │ fte-odoo  │  │fte-facebook│        │fte-insta  │
-    │ (Node)  │          │ (Python)  │  │ (Python)   │        │ (Python)  │
-    └────┬────┘          └─────┬─────┘  └─────┬──────┘        └─────┬─────┘
-         │                     │              │                     │
-    Gmail API            Odoo Docker     Meta Graph API       Meta Graph API
-                       (JSON-RPC)         (Facebook)          (Instagram)
+     ┌──────────┬──────────────┤              ├──────────────┬──────────┐
+     │          │              │              │              │          │
+┌────▼────┐ ┌──▼───┐   ┌──────▼────┐  ┌──────▼────┐  ┌─────▼───┐ ┌───▼────┐
+│fte-email│ │fte-  │   │fte-      │  │fte-      │  │fte-    │ │fte-   │
+│ (Node)  │ │odoo  │   │facebook  │  │instagram │  │twitter │ │linked │
+│         │ │(Py)  │   │(Python)  │  │(Python)  │  │(Py/PW) │ │in(PW) │
+└────┬────┘ └──┬───┘   └────┬─────┘  └────┬─────┘  └───┬────┘ └───┬───┘
+     │         │             │             │            │           │
+Gmail API  Odoo Docker  Meta Graph   Meta Graph    Playwright  Playwright
+           (JSON-RPC)   API v25.0    API v25.0     (Chromium)  (Chromium)
 ```
 
 ## Data Flow
@@ -35,8 +36,10 @@ Trigger (Email/WhatsApp/File) → Watcher → Needs_Action/ → Orchestrator
 |--------|-------|---------|-----------|
 | fte-email | send_email, draft_email | Gmail API | stdio (Node.js) |
 | fte-odoo | create_invoice, get_invoices, mark_payment, get_summary, get_expenses, create_expense | Odoo JSON-RPC | stdio (Python) |
-| fte-facebook | create_page_post, get_posts, get_comments, reply_comment, get_insights | Meta Graph API v21.0 | stdio (Python) |
-| fte-instagram | create_ig_post, create_ig_reel, get_media, get_comments, reply_comment, get_insights | Meta Graph API v21.0 | stdio (Python) |
+| fte-facebook | create_page_post, get_posts, get_comments, reply_comment, get_insights | Meta Graph API v25.0 | stdio (Python) |
+| fte-instagram | create_ig_post, create_ig_reel, get_media, get_comments, reply_comment, get_insights | Meta Graph API v25.0 | stdio (Python) |
+| fte-twitter | post_tweet, get_my_tweets, reply_to_tweet, like_tweet | Playwright (Firefox headless + Chromium login) | stdio (Python) |
+| fte-linkedin | create_linkedin_post, get_linkedin_posts, comment_on_linkedin_post, like_linkedin_post | Playwright (Chromium) | stdio (Python) |
 
 ## Cross-Domain Integration
 
@@ -83,6 +86,8 @@ Action → LogEntry (dataclass) → AuditLogger.log()
 - `src/mcp/odoo_server.py` — Odoo JSON-RPC (6 tools)
 - `src/mcp/facebook_server.py` — Facebook Graph API (5 tools)
 - `src/mcp/instagram_server.py` — Instagram Graph API (6 tools)
+- `src/mcp/twitter_server.py` — Twitter/X Playwright (4 tools)
+- `src/mcp/linkedin_server.py` — LinkedIn Playwright (4 tools)
 - `src/mcp/_meta_client.py` — Shared Meta API client
 
 ### Orchestration
@@ -98,7 +103,11 @@ Action → LogEntry (dataclass) → AuditLogger.log()
 - `src/utils/ceo_briefing.py` — Weekly briefing generator
 - `src/utils/dashboard.py` — Dashboard updater
 
-### Agent Skills (12 total)
+### Playwright Bots
+- `src/playwright/twitter_bot.py` — Twitter/X browser automation
+- `src/playwright/linkedin_bot.py` — LinkedIn browser automation
+
+### Agent Skills (14 total)
 - Bronze: process_document, update_dashboard, create_approval_request
 - Silver: email_responder, whatsapp_handler, plan_creator
-- Gold: odoo_accountant, facebook_poster, instagram_manager, ceo_briefing, audit_logger, error_handler
+- Gold: odoo_accountant, facebook_poster, instagram_manager, twitter_poster, linkedin_poster, ceo_briefing, audit_logger, error_handler

@@ -72,6 +72,18 @@ class CEOBriefingGenerator:
         else:
             missing_sources.append("instagram")
 
+        tw_data = self._get_twitter_data()
+        if tw_data:
+            data_sources.append("twitter")
+        else:
+            missing_sources.append("twitter")
+
+        li_data = self._get_linkedin_data()
+        if li_data:
+            data_sources.append("linkedin")
+        else:
+            missing_sources.append("linkedin")
+
         comm_data = self._get_communication_data(start, end)
         if comm_data.get("emails_processed", 0) > 0 or comm_data.get("whatsapp_messages", 0) > 0:
             if comm_data.get("emails_processed", 0) > 0:
@@ -87,7 +99,7 @@ class CEOBriefingGenerator:
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         briefing = self._render_briefing(
             start, end, now, data_sources, missing_sources,
-            odoo_data, fb_data, ig_data, comm_data,
+            odoo_data, fb_data, ig_data, tw_data, li_data, comm_data,
         )
 
         # Save briefing
@@ -118,39 +130,18 @@ class CEOBriefingGenerator:
         return briefing_path
 
     def _get_odoo_data(self, start, end) -> dict | None:
-        """Collect financial data from Odoo via direct JSON-RPC."""
+        """Collect financial data from Odoo via MCP server functions.
+
+        Uses the fte-odoo MCP server which auto-manages Docker containers.
+        """
         try:
-            import requests
-            odoo_url = os.getenv("ODOO_URL", "")
-            odoo_db = os.getenv("ODOO_DB", "")
-            odoo_user = os.getenv("ODOO_USER", "")
-            odoo_password = os.getenv("ODOO_PASSWORD", "")
+            from src.mcp.odoo_server import _ensure_odoo_running, _authenticate, _execute_kw
 
-            if not all([odoo_url, odoo_db, odoo_user, odoo_password]):
-                return None
-
-            def jsonrpc(service, method, args):
-                resp = requests.post(f"{odoo_url}/jsonrpc", json={
-                    "jsonrpc": "2.0", "method": "call",
-                    "params": {"service": service, "method": method, "args": args},
-                    "id": 1,
-                }, timeout=15)
-                data = resp.json()
-                if "error" in data:
-                    return None
-                return data.get("result")
-
-            uid = jsonrpc("common", "authenticate",
-                          [odoo_db, odoo_user, odoo_password, {}])
-            if not uid:
-                return None
-
-            def execute_kw(model, method, args, kwargs=None):
-                return jsonrpc("object", "execute_kw",
-                               [odoo_db, uid, odoo_password, model, method, args, kwargs or {}])
+            _ensure_odoo_running()
+            _authenticate()
 
             # Revenue (paid invoices this week)
-            paid = execute_kw("account.move", "search_read", [[
+            paid = _execute_kw("account.move", "search_read", [[
                 ["move_type", "=", "out_invoice"],
                 ["payment_state", "=", "paid"],
                 ["invoice_date", ">=", str(start)],
@@ -159,18 +150,22 @@ class CEOBriefingGenerator:
             revenue = sum(i.get("amount_total", 0) for i in paid)
 
             # Pending invoices
-            pending = execute_kw("account.move", "search_read", [[
+            pending = _execute_kw("account.move", "search_read", [[
                 ["move_type", "=", "out_invoice"],
                 ["payment_state", "!=", "paid"],
                 ["state", "=", "posted"],
             ]], {"fields": ["amount_total"]}) or []
 
-            # Expenses
-            expenses = execute_kw("hr.expense", "search_read", [[
-                ["date", ">=", str(start)],
-                ["date", "<=", str(end)],
-            ]], {"fields": ["total_amount"]}) or []
-            total_expenses = sum(e.get("total_amount", 0) for e in expenses)
+            # Expenses (may not be installed)
+            total_expenses = 0
+            try:
+                expenses = _execute_kw("hr.expense", "search_read", [[
+                    ["date", ">=", str(start)],
+                    ["date", "<=", str(end)],
+                ]], {"fields": ["total_amount"]}) or []
+                total_expenses = sum(e.get("total_amount", 0) for e in expenses)
+            except RuntimeError:
+                logger.info("hr.expense module not available — expenses set to 0")
 
             return {
                 "revenue": revenue,
@@ -214,6 +209,38 @@ class CEOBriefingGenerator:
         except Exception:
             return None
 
+    def _get_twitter_data(self) -> dict | None:
+        """Collect Twitter/X metrics from vault Done/ files."""
+        try:
+            done = self.vault_path / "Done"
+            if not done.exists():
+                return None
+
+            tw_count = sum(1 for f in done.iterdir()
+                           if f.name.startswith("TW_") or f.name.startswith("SUMMARY_TW_"))
+            if tw_count == 0:
+                return None
+
+            return {"post_count": tw_count, "engagement": "N/A", "last_post": "See vault"}
+        except Exception:
+            return None
+
+    def _get_linkedin_data(self) -> dict | None:
+        """Collect LinkedIn metrics from vault Done/ files."""
+        try:
+            done = self.vault_path / "Done"
+            if not done.exists():
+                return None
+
+            li_count = sum(1 for f in done.iterdir()
+                           if f.name.startswith("LI_") or f.name.startswith("SUMMARY_LI_"))
+            if li_count == 0:
+                return None
+
+            return {"post_count": li_count, "engagement": "N/A", "last_post": "See vault"}
+        except Exception:
+            return None
+
     def _get_communication_data(self, start, end) -> dict:
         """Count email and WhatsApp files in vault Done/ for the week."""
         done = self.vault_path / "Done"
@@ -249,7 +276,7 @@ class CEOBriefingGenerator:
         }
 
     def _render_briefing(self, start, end, generated_at, data_sources,
-                         missing_sources, odoo, fb, ig, comm) -> str:
+                         missing_sources, odoo, fb, ig, tw, li, comm) -> str:
         """Render the CEO Briefing markdown document."""
         missing_yaml = f"[{', '.join(missing_sources)}]" if missing_sources else "[]"
         sources_yaml = f"[{', '.join(data_sources)}]"
@@ -278,8 +305,13 @@ class CEOBriefingGenerator:
         if ig:
             social_rows.append(f"| Instagram | {ig['post_count']} | {ig['engagement']} | {ig['last_post']} |")
 
+        if tw:
+            social_rows.append(f"| Twitter/X | {tw['post_count']} | {tw['engagement']} | {tw['last_post']} |")
+        if li:
+            social_rows.append(f"| LinkedIn | {li['post_count']} | {li['engagement']} | {li['last_post']} |")
+
         if social_rows:
-            social = f"""## Social Media (Facebook + Instagram)
+            social = f"""## Social Media
 
 | Platform | Posts | Engagement | Last Post |
 |----------|-------|------------|-----------|

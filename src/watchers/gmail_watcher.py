@@ -35,7 +35,7 @@ class GmailWatcher(BaseWatcher):
         super().__init__(vault_path)
         self._credentials_path = credentials_path or os.getenv("GMAIL_CREDENTIALS_PATH")
         self._token_path = token_path or os.getenv("GMAIL_TOKEN_PATH")
-        self._query = os.getenv("GMAIL_QUERY", "is:unread is:important")
+        self._query = os.getenv("GMAIL_QUERY", "is:unread")
         self._poll_interval = int(os.getenv("POLL_INTERVAL", "120"))
         self._service = None
         self._running = False

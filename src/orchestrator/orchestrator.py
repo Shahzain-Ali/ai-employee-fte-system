@@ -69,7 +69,7 @@ class Orchestrator:
         if not self._needs_action.exists():
             return []
 
-        prefixes = ("FILE_", "EMAIL_", "WA_", "ODOO_", "FB_", "IG_")
+        prefixes = ("FILE_", "EMAIL_", "WA_", "ODOO_", "FB_", "IG_", "TW_", "LI_")
         files = [
             f for f in self._needs_action.iterdir()
             if f.is_file()
@@ -138,13 +138,16 @@ class Orchestrator:
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)
 
+        # Use project root as cwd so Claude subprocess finds .mcp.json for MCP servers
+        project_root = Path(__file__).resolve().parent.parent.parent
+
         try:
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=self._claude_timeout,
-                cwd=str(self.vault_path),
+                cwd=str(project_root),
                 env=env,
             )
             if result.returncode == 0:
@@ -307,6 +310,10 @@ To **REJECT**: Move this file to `Rejected/`
             return "facebook_poster"
         if name.startswith("IG_"):
             return "instagram_manager"
+        if name.startswith("TW_"):
+            return "twitter_poster"
+        if name.startswith("LI_"):
+            return "linkedin_poster"
         return "process_document"
 
     def _move_to_done(self, action_file: Path) -> None:

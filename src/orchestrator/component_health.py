@@ -24,6 +24,8 @@ class ComponentHealthRegistry:
         "odoo": "Odoo (Docker)",
         "facebook": "Facebook Graph API",
         "instagram": "Instagram Graph API",
+        "twitter": "Twitter/X (Playwright)",
+        "linkedin": "LinkedIn (Playwright)",
         "gmail": "Gmail Watcher",
         "whatsapp": "WhatsApp Watcher",
     }

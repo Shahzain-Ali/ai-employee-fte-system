@@ -1,8 +1,17 @@
-"""MCP Server: fte-odoo — Odoo accounting via JSON-RPC."""
+"""MCP Server: fte-odoo — Odoo accounting via JSON-RPC.
+
+Auto-manages Docker containers: starts Odoo+PostgreSQL on first call,
+stops them when MCP server shuts down (via idle timeout or clean exit).
+"""
 import os
 import sys
 import json
+import time
+import atexit
 import logging
+import signal
+import subprocess
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
 import requests
@@ -19,15 +28,125 @@ mcp = FastMCP("fte-odoo")
 
 # Odoo connection config
 ODOO_URL = os.getenv("ODOO_URL", "http://localhost:8069")
-ODOO_DB = os.getenv("ODOO_DB", "fte_gold")
+ODOO_DB = os.getenv("ODOO_DB", "fte-ai-employee")
 ODOO_USER = os.getenv("ODOO_USER", "admin")
 ODOO_PASSWORD = os.getenv("ODOO_PASSWORD", "")
 
+# Docker compose file path
+COMPOSE_FILE = Path(__file__).resolve().parent.parent.parent / "config" / "docker-compose.yml"
+
+# Idle timeout - MCP server will exit after this many seconds of inactivity
+IDLE_TIMEOUT = int(os.getenv("MCP_IDLE_TIMEOUT", "30"))
+
 _uid_cache: int | None = None
+_docker_started_by_us: bool = False
+_last_request_time: float = 0
+_server_running: bool = True
+
+
+def _update_activity() -> None:
+    """Update last request timestamp."""
+    global _last_request_time
+    _last_request_time = time.time()
+
+
+def _check_idle_timeout() -> bool:
+    """Check if server has been idle too long. Returns True if should exit."""
+    global _server_running
+    if not _server_running:
+        return True
+
+    if _last_request_time == 0:
+        return False
+
+    idle_time = time.time() - _last_request_time
+    if idle_time > IDLE_TIMEOUT:
+        logger.info(f"Idle timeout reached ({idle_time:.0f}s > {IDLE_TIMEOUT}s). Shutting down MCP server...")
+        _server_running = False
+        return True
+    return False
+
+
+def _is_odoo_reachable() -> bool:
+    """Check if Odoo is responding on its URL."""
+    try:
+        resp = requests.get(f"{ODOO_URL}/web/database/selector", timeout=5)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
+def _ensure_odoo_running() -> None:
+    """Start Odoo Docker containers if not already running."""
+    global _docker_started_by_us
+
+    if _is_odoo_reachable():
+        return
+
+    logger.info("Odoo not reachable — starting Docker containers...")
+    try:
+        subprocess.run(
+            ["docker", "compose", "-f", str(COMPOSE_FILE), "start"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except Exception:
+        # Containers may not exist yet, try 'up'
+        subprocess.run(
+            ["docker", "compose", "-f", str(COMPOSE_FILE), "up", "-d"],
+            capture_output=True, text=True, timeout=60,
+        )
+
+    # Wait for Odoo to be ready (max 60 seconds)
+    for i in range(30):
+        if _is_odoo_reachable():
+            logger.info("Odoo is ready (took ~%ds)", (i + 1) * 2)
+            _docker_started_by_us = True
+            return
+        time.sleep(2)
+
+    raise ConnectionError("Odoo containers started but not responding after 60s")
+
+
+def _stop_odoo_containers() -> None:
+    """Stop Odoo Docker containers if we started them."""
+    if _docker_started_by_us:
+        logger.info("Stopping Odoo Docker containers (auto-cleanup)...")
+        try:
+            subprocess.run(
+                ["docker", "compose", "-f", str(COMPOSE_FILE), "stop"],
+                capture_output=True, text=True, timeout=30,
+            )
+            logger.info("Odoo containers stopped")
+        except Exception as e:
+            logger.warning("Failed to stop containers: %s", e)
+
+
+# Auto-stop containers when MCP server exits
+atexit.register(_stop_odoo_containers)
+
+
+def _check_idle_and_exit() -> None:
+    """Background thread: exit if idle for IDLE_TIMEOUT seconds."""
+    while _server_running:
+        time.sleep(5)  # Check every 5 seconds
+        if _last_request_time > 0 and _server_running:
+            idle_time = time.time() - _last_request_time
+            if idle_time > IDLE_TIMEOUT:
+                logger.info(f"Idle timeout reached ({IDLE_TIMEOUT}s) — shutting down MCP server...")
+                global _docker_started_by_us
+                _stop_odoo_containers()
+                os._exit(0)
+
+
+def _signal_handler(signum, frame):
+    """Handle shutdown signals gracefully."""
+    logger.info("Received signal %d — shutting down...", signum)
+    _stop_odoo_containers()
+    sys.exit(0)
 
 
 def _odoo_jsonrpc(service: str, method: str, args: list) -> dict:
-    """Make a JSON-RPC call to Odoo.
+    """Make a JSON-RPC call to Odoo. Auto-starts containers if needed.
 
     Args:
         service: Odoo service (common, object, db).
@@ -41,6 +160,8 @@ def _odoo_jsonrpc(service: str, method: str, args: list) -> dict:
         ConnectionError: If Odoo is unreachable.
         RuntimeError: If Odoo returns an error.
     """
+    _ensure_odoo_running()
+
     payload = {
         "jsonrpc": "2.0",
         "method": "call",
@@ -131,6 +252,7 @@ def create_invoice(partner_name: str, lines: list[dict], due_date: str = "") -> 
         lines: Invoice line items, each with 'description' and 'price_unit', optional 'quantity'.
         due_date: Due date in YYYY-MM-DD format (optional).
     """
+    _update_activity()
     try:
         partner_id = _find_or_create_partner(partner_name)
 
@@ -172,6 +294,7 @@ def get_invoices(status: str = "all", limit: int = 20) -> str:
         status: Filter by invoice status (draft, posted, paid, all).
         limit: Maximum number of invoices to return.
     """
+    _update_activity()
     try:
         domain = [["move_type", "=", "out_invoice"]]
         if status == "draft":
@@ -216,6 +339,7 @@ def mark_payment_received(invoice_id: int, amount: float = 0, payment_date: str 
         amount: Payment amount (defaults to full invoice amount if 0).
         payment_date: Payment date YYYY-MM-DD (defaults to today).
     """
+    _update_activity()
     try:
         # Read invoice to get amount if not specified
         invoices = _execute_kw("account.move", "read", [[invoice_id]],
@@ -257,6 +381,7 @@ def get_weekly_summary(week_start: str = "") -> str:
     Args:
         week_start: Week start date YYYY-MM-DD (defaults to current week's Monday).
     """
+    _update_activity()
     try:
         if week_start:
             start = datetime.strptime(week_start, "%Y-%m-%d").date()
@@ -313,6 +438,7 @@ def get_expenses(limit: int = 20) -> str:
     Args:
         limit: Maximum number of expenses to return.
     """
+    _update_activity()
     try:
         expenses = _execute_kw("hr.expense", "search_read", [[]], {
             "fields": ["id", "name", "total_amount", "date", "state"],
@@ -346,6 +472,7 @@ def create_expense(description: str, amount: float, category: str = "", date: st
         category: Expense category (e.g., 'Office Supplies', 'Travel').
         date: Expense date YYYY-MM-DD (defaults to today).
     """
+    _update_activity()
     try:
         vals = {
             "name": description,
@@ -362,4 +489,13 @@ def create_expense(description: str, amount: float, category: str = "", date: st
 
 
 if __name__ == "__main__":
+    # Start idle monitor thread
+    import threading
+    idle_thread = threading.Thread(target=_check_idle_and_exit, daemon=True)
+    idle_thread.start()
+
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
+
     mcp.run(transport="stdio")

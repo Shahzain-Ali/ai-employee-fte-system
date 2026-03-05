@@ -2,10 +2,11 @@
   "hooks": {
     "Stop": [
       {
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "./scripts/ralph-wiggum-check.sh"
+            "command": "bash ./scripts/ralph-wiggum-check.sh"
           }
         ]
       }
