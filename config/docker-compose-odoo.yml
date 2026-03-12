@@ -1,0 +1,39 @@
+# Odoo Docker Compose — Platinum Tier Cloud VM (ARM64)
+# Deploy: docker compose -f config/docker-compose-odoo.yml up -d
+
+services:
+  odoo:
+    image: odoo:17
+    container_name: odoo-web
+    depends_on:
+      - db
+    ports:
+      - "127.0.0.1:8069:8069"
+      - "127.0.0.1:8072:8072"
+    volumes:
+      - odoo-data:/var/lib/odoo
+      - odoo-config:/etc/odoo
+      - odoo-addons:/mnt/extra-addons
+    environment:
+      - HOST=db
+      - USER=odoo
+      - PASSWORD=odoo_password_change_me
+    restart: unless-stopped
+
+  db:
+    image: postgres:15
+    container_name: odoo-db
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=odoo
+      - POSTGRES_PASSWORD=odoo_password_change_me
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data/pgdata
+    restart: unless-stopped
+
+volumes:
+  odoo-data:
+  odoo-config:
+  odoo-addons:
+  postgres-data:

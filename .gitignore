@@ -11,8 +11,12 @@ __pycache__/
 dist/
 build/
 
-# Logs — contain personal data
-AI_Employee_Vault/Logs/*.json
+# Vault data — contains personal data (emails, messages, approvals)
+AI_Employee_Vault/Inbox/
+AI_Employee_Vault/Done/
+AI_Employee_Vault/Briefings/
+AI_Employee_Vault/Tasks/
+AI_Employee_Vault/Logs/
 
 # Test artifacts
 .pytest_cache/
@@ -24,6 +28,18 @@ htmlcov/
 .idea/
 *.swp
 *.swo
+
+# Silver Tier — secrets, sessions, state
+.secrets/
+.sessions/
+.state/
+jobs.db
+
+# Node
+node_modules/
+
+# Platinum Tier — vault is a separate private repo
+vault/
 
 # OS
 .DS_Store

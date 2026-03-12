@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "watcher-status.schema.json",
+  "title": "Watcher Status",
+  "description": "Schema for runtime watcher state stored in .state/watchers.json",
+  "type": "object",
+  "required": ["watchers", "updated_at"],
+  "properties": {
+    "watchers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["name", "status", "last_check", "last_result", "items_today", "errors_today", "started_at"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Display name for dashboard"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running", "stopped", "error", "session_expired"],
+            "description": "Current watcher status"
+          },
+          "last_check": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last successful check timestamp"
+          },
+          "last_result": {
+            "type": "string",
+            "enum": ["success", "failure", "no_items"],
+            "description": "Result of last check"
+          },
+          "items_today": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Items processed today"
+          },
+          "errors_today": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Errors encountered today"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When watcher was started"
+          },
+          "session_valid": {
+            "type": "boolean",
+            "description": "For watchers requiring session (WhatsApp)"
+          },
+          "last_error": {
+            "type": "string",
+            "description": "Last error message if any"
+          }
+        }
+      }
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When status was last updated"
+    }
+  }
+}

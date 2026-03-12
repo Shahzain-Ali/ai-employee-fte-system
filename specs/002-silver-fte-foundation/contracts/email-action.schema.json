@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "email-action.schema.json",
+  "title": "Email Action File",
+  "description": "Schema for EMAIL_*.md action files created by Gmail Watcher",
+  "type": "object",
+  "required": [
+    "type",
+    "message_id",
+    "thread_id",
+    "from",
+    "to",
+    "subject",
+    "date",
+    "snippet",
+    "status",
+    "detected_at"
+  ],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "email",
+      "description": "Action type identifier"
+    },
+    "message_id": {
+      "type": "string",
+      "description": "Gmail message ID",
+      "pattern": "^[a-zA-Z0-9]+$"
+    },
+    "thread_id": {
+      "type": "string",
+      "description": "Gmail thread ID",
+      "pattern": "^[a-zA-Z0-9]+$"
+    },
+    "from": {
+      "type": "string",
+      "format": "email",
+      "description": "Sender email address"
+    },
+    "from_name": {
+      "type": "string",
+      "description": "Sender display name"
+    },
+    "to": {
+      "type": "string",
+      "format": "email",
+      "description": "Recipient email address"
+    },
+    "subject": {
+      "type": "string",
+      "description": "Email subject line"
+    },
+    "date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Email timestamp (ISO 8601)"
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Gmail labels"
+    },
+    "snippet": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "First 100-200 chars of body"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "processing", "completed", "failed"],
+      "description": "Processing status"
+    },
+    "detected_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When watcher detected email"
+    },
+    "has_attachments": {
+      "type": "boolean",
+      "description": "Whether email has attachments"
+    },
+    "attachment_names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of attachment filenames"
+    }
+  }
+}

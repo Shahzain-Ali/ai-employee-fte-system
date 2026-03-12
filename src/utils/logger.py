@@ -21,6 +21,12 @@ class LogEntry:
     approval_status: str = "not_required"
     duration_ms: Optional[int] = None
     error: Optional[str] = None
+    # Gold tier fields
+    workflow_id: Optional[str] = None
+    mcp_server: Optional[str] = None
+    retry_count: Optional[int] = None
+    error_message: Optional[str] = None
+    domain: Optional[str] = None
 
 
 class AuditLogger:
@@ -62,6 +68,16 @@ class AuditLogger:
             record["duration_ms"] = entry.duration_ms
         if entry.error:
             record["error"] = entry.error
+        if entry.workflow_id:
+            record["workflow_id"] = entry.workflow_id
+        if entry.mcp_server:
+            record["mcp_server"] = entry.mcp_server
+        if entry.retry_count is not None:
+            record["retry_count"] = entry.retry_count
+        if entry.error_message:
+            record["error_message"] = entry.error_message
+        if entry.domain:
+            record["domain"] = entry.domain
 
         # Read existing entries (or start fresh)
         if log_file.exists():

@@ -1,0 +1,62 @@
+{
+  "mcpServers": {
+    "fte-email": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/mnt/e/hackathon-0/full-time-equivalent-project/src/mcp/index.js"
+      ],
+      "env": {}
+    },
+    "fte-odoo": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "src/mcp/odoo_server.py"
+      ],
+      "env": {}
+    },
+    "fte-facebook": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "src/mcp/facebook_server.py"
+      ],
+      "env": {}
+    },
+    "fte-instagram": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "src/mcp/instagram_server.py"
+      ],
+      "env": {}
+    },
+    "fte-twitter": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "src/mcp/twitter_server.py"
+      ],
+      "env": {}
+    },
+    "fte-linkedin": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "src/mcp/linkedin_server.py"
+      ],
+      "env": {}
+    }
+  }
+}
