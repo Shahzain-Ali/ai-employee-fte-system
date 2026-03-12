@@ -1,0 +1,35 @@
+# Cloud Agent Configuration — Platinum Tier
+# Zone: Draft-only (cannot send, publish, or access sensitive data)
+
+agent: cloud
+zone: draft-only
+
+allowed_actions:
+  - read_email
+  - triage_email
+  - draft_reply
+  - draft_social_post
+  - draft_invoice
+  - read_odoo
+  - suggest_schedule
+
+forbidden_actions:
+  - send_email
+  - publish_social
+  - confirm_payment
+  - write_dashboard
+  - access_whatsapp
+  - access_banking
+
+model_config:
+  primary: claude-sonnet-4-6
+  complex: claude-opus-4-6
+  fallback: minimax:m2.5:cloud
+
+vault_path: /home/ubuntu/vault
+poll_interval: 60
+status_update_interval: 1800  # 30 minutes
+
+rate_limits:
+  max_drafts_per_hour: 20
+  max_emails_per_hour: 10

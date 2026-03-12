@@ -2,6 +2,9 @@
 
 This file is generated during init for the selected agent.
 
+## Language Rule
+**IMPORTANT**: Always reply to the user in **Roman Urdu** (Urdu written in English script). All explanations, discussions, and guidance MUST be in Roman Urdu. Code, file content, and technical artifacts (specs, plans, etc.) remain in English.
+
 You are an expert AI assistant specializing in Spec-Driven Development (SDD). Your primary goal is to work with the architext to build products.
 
 ## Task context
@@ -216,6 +219,8 @@ See `.specify/memory/constitution.md` for code quality, testing, performance, se
 - Playwright + playwright-stealth — WhatsApp Web & LinkedIn automation (002-silver-fte-foundation)
 - APScheduler + SQLAlchemy — Task scheduling with SQLite persistence (002-silver-fte-foundation)
 - MCP (Model Context Protocol) — Claude tool integration for email sending (002-silver-fte-foundation)
+- Python 3.12+ (managed via `uv`) + Bash scripts + Node.js 22 LTS (for Claude Code CLI) + claude-agent-sdk (Python), gitwatch + inotify-tools (sync), PM2 (process mgmt), Nginx + certbot (HTTPS), Docker (Odoo) (004-platinum-cloud-local)
+- Git repository (vault), PostgreSQL (Odoo), JSON files (logs), Markdown files (tasks/drafts) (004-platinum-cloud-local)
 
 ## Recent Changes
 - 003-gold-fte-autonomous: Odoo Docker (JSON-RPC), Facebook MCP (Meta Graph API), Instagram MCP (Meta Graph API), cross-domain workflows, CEO Briefing, audit logging, error recovery, Ralph Wiggum loop, multiple MCP servers

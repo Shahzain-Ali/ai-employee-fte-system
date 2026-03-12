@@ -1,0 +1,25 @@
+# Local Agent Configuration — Platinum Tier
+# Zone: Full-access (approval, send, publish, sensitive data)
+
+agent: local
+zone: full-access
+
+allowed_actions:
+  - all
+  - approve_drafts
+  - send_email
+  - publish_social
+  - confirm_payment
+  - write_dashboard
+  - access_whatsapp
+  - access_banking
+
+forbidden_actions: []
+
+model_config:
+  primary: claude-sonnet-4-6
+  complex: claude-opus-4-6
+  fallback: minimax:m2.5:cloud
+
+vault_path: ~/vault
+poll_interval: 60

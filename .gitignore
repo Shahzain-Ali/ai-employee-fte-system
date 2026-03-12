@@ -38,6 +38,9 @@ jobs.db
 # Node
 node_modules/
 
+# Platinum Tier — vault is a separate private repo
+vault/
+
 # OS
 .DS_Store
 Thumbs.db
