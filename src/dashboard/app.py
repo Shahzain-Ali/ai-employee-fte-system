@@ -258,6 +258,28 @@ def get_vault_stats() -> dict:
     return stats
 
 
+def get_mcp_server_status() -> dict:
+    """Check which MCP servers are configured in .mcp.json."""
+    mcp_config_path = PROJECT_ROOT / ".mcp.json"
+    servers = {
+        "fte-email": False,
+        "fte-odoo": False,
+        "fte-facebook": False,
+        "fte-instagram": False,
+        "fte-twitter": False,
+        "fte-linkedin": False,
+    }
+    if mcp_config_path.exists():
+        try:
+            data = json.loads(mcp_config_path.read_text(encoding="utf-8"))
+            configured = data.get("mcpServers", {})
+            for name in servers:
+                servers[name] = name in configured
+        except Exception:
+            pass
+    return servers
+
+
 def get_recent_activity(limit: int = 10) -> list:
     """Get recent activity from Done/ folder."""
     activities = []
@@ -327,9 +349,15 @@ def get_platform_connection_status() -> Dict[str, bool]:
         except Exception:
             status["instagram"] = False
 
-    # Twitter/LinkedIn - not implemented yet
-    status["twitter"] = False  # Will implement later
-    status["linkedin"] = False  # Will implement later
+    # Twitter - check credentials
+    twitter_api_key = os.getenv("TWITTER_API_KEY", "")
+    twitter_api_secret = os.getenv("TWITTER_API_SECRET", "")
+    status["twitter"] = bool(twitter_api_key and twitter_api_secret)
+
+    # LinkedIn - check API credentials
+    linkedin_token = os.getenv("LINKEDIN_ACCESS_TOKEN", "")
+    linkedin_person = os.getenv("LINKEDIN_PERSON_URN", "")
+    status["linkedin"] = bool(linkedin_token and linkedin_person)
 
     return status
 
@@ -458,7 +486,30 @@ def render_header():
 
     /* Sidebar styling */
     [data-testid="stSidebar"] {
-        background-color: #f8f9fa;
+        background-color: #1e1e2e;
+    }
+
+    /* Sidebar button styling — fix hover visibility */
+    [data-testid="stSidebar"] button {
+        background-color: #2d2d44 !important;
+        color: #ffffff !important;
+        border: 1px solid #3d3d5c !important;
+        border-radius: 8px !important;
+        margin-bottom: 4px !important;
+    }
+    [data-testid="stSidebar"] button:hover {
+        background-color: #4a4a7a !important;
+        color: #ffffff !important;
+        border-color: #6a6aaa !important;
+    }
+    [data-testid="stSidebar"] button:focus {
+        background-color: #5a5a9a !important;
+        color: #ffffff !important;
+    }
+
+    /* Sidebar text color */
+    [data-testid="stSidebar"] .stMarkdown {
+        color: #e0e0e0 !important;
     }
 
     /* Hide Streamlit branding */
@@ -549,9 +600,13 @@ def render_overview():
 
 def check_odoo_setup() -> bool:
     """Check if Odoo docker setup exists."""
-    odoo_dir = PROJECT_ROOT / "docker" / "odoo"
-    docker_compose = odoo_dir / "docker-compose.yml"
-    return odoo_dir.exists() and docker_compose.exists()
+    # Check both possible locations for docker-compose
+    config_compose = PROJECT_ROOT / "config" / "docker-compose-odoo.yml"
+    legacy_compose = PROJECT_ROOT / "docker" / "odoo" / "docker-compose.yml"
+    has_compose = config_compose.exists() or legacy_compose.exists()
+    # Also check if ODOO_PASSWORD is configured (not empty default)
+    has_password = bool(os.getenv("ODOO_PASSWORD", ""))
+    return has_compose or has_password
 
 
 def check_odoo_running() -> bool:
@@ -872,6 +927,42 @@ def create_social_post(message: str, platforms: List[str]) -> Dict[str, Any]:
                     "error": "Instagram requires an image. Text-only posts not supported."
                 }
 
+            elif platform == 'linkedin':
+                # LinkedIn API posting
+                linkedin_token = os.getenv("LINKEDIN_ACCESS_TOKEN", "")
+                linkedin_person = os.getenv("LINKEDIN_PERSON_URN", "")
+                linkedin_org = os.getenv("LINKEDIN_ORGANIZATION_URN", "")
+                author = linkedin_person or linkedin_org
+
+                if linkedin_token and author:
+                    url = "https://api.linkedin.com/v2/ugcPosts"
+                    headers = {
+                        "Authorization": f"Bearer {linkedin_token}",
+                        "Content-Type": "application/json",
+                        "X-Restli-Protocol-Version": "2.0.0",
+                        "LinkedIn-Version": "202401"
+                    }
+                    payload = {
+                        "author": author,
+                        "lifecycleState": "PUBLISHED",
+                        "specificContent": {
+                            "com.linkedin.ugc.ShareContent": {
+                                "shareCommentary": {"text": message},
+                                "shareMediaCategory": "NONE"
+                            }
+                        },
+                        "visibility": {
+                            "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+                        }
+                    }
+                    response = requests.post(url, headers=headers, json=payload, timeout=30)
+                    if response.status_code in [200, 201]:
+                        results[platform] = {"success": True, "data": response.json()}
+                    else:
+                        results[platform] = {"success": False, "error": response.text}
+                else:
+                    results[platform] = {"success": False, "error": "LinkedIn credentials not configured"}
+
         except Exception as e:
             results[platform] = {"success": False, "error": str(e)}
 
@@ -958,9 +1049,9 @@ def render_social_media():
             with col4:
                 post_to_linkedin = st.checkbox(
                     "LinkedIn",
-                    value=False,
-                    disabled=True,
-                    help="LinkedIn integration coming soon"
+                    value=platform_status.get('linkedin', False),
+                    disabled=not platform_status.get('linkedin', False),
+                    help="Post to LinkedIn via API"
                 )
 
             col1, col2 = st.columns(2)
@@ -982,6 +1073,8 @@ def render_social_media():
                         selected_platforms.append('facebook')
                     if post_to_instagram:
                         selected_platforms.append('instagram')
+                    if post_to_linkedin:
+                        selected_platforms.append('linkedin')
 
                     if not selected_platforms:
                         st.error("❌ Please select at least one platform")
@@ -1123,16 +1216,39 @@ def render_social_media():
 
     st.divider()
 
-    # Twitter/LinkedIn placeholders
-    col1, col2 = st.columns(2)
+    # Twitter section
+    st.subheader("🐦 Twitter/X")
+    if platform_status.get('twitter'):
+        st.markdown('<span class="status-connected">🟢 Connected</span>', unsafe_allow_html=True)
+    else:
+        st.info("🔴 Not Connected — Configure TWITTER_API_KEY in .env")
 
-    with col1:
-        st.subheader("🐦 Twitter/X")
-        st.info("🔴 Not Connected — Integration coming soon")
+    st.divider()
 
-    with col2:
-        st.subheader("💼 LinkedIn")
-        st.info("🔴 Not Connected — Integration coming soon")
+    # LinkedIn section
+    st.subheader("💼 LinkedIn")
+    if platform_status.get('linkedin'):
+        st.markdown('<span class="status-connected">🟢 Connected</span>', unsafe_allow_html=True)
+        # Show LinkedIn profile info
+        linkedin_token = os.getenv("LINKEDIN_ACCESS_TOKEN", "")
+        if linkedin_token:
+            try:
+                resp = requests.get(
+                    "https://api.linkedin.com/v2/userinfo",
+                    headers={"Authorization": f"Bearer {linkedin_token}"},
+                    timeout=10
+                )
+                if resp.status_code == 200:
+                    profile = resp.json()
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown(f"**Profile**: {profile.get('name', 'Unknown')}")
+                    with col2:
+                        st.markdown(f"**Email**: {profile.get('email', 'N/A')}")
+            except Exception:
+                st.write("Profile info unavailable")
+    else:
+        st.info("🔴 Not Connected — Configure LINKEDIN_ACCESS_TOKEN in .env")
 
 
 def render_communications():
@@ -1234,6 +1350,80 @@ def render_communications():
                 3. Scan QR code to authenticate
                 4. Session will be saved for future use
                 """)
+
+    st.divider()
+
+    # Compose & Send Email
+    st.subheader("✉️ Compose & Send Email")
+
+    if 'show_email_form' not in st.session_state:
+        st.session_state.show_email_form = False
+    if 'email_sent' not in st.session_state:
+        st.session_state.email_sent = False
+
+    if not st.session_state.show_email_form and not st.session_state.email_sent:
+        if st.button("📝 Compose New Email", type="primary", key="compose_email"):
+            st.session_state.show_email_form = True
+            st.rerun()
+
+    if st.session_state.show_email_form:
+        with st.form("email_compose_form"):
+            st.markdown("### ✍️ New Email")
+            email_to = st.text_input("To", placeholder="recipient@example.com")
+            email_subject = st.text_input("Subject", placeholder="Email subject...")
+            email_body = st.text_area("Body", placeholder="Write your email here...", height=200)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                send_btn = st.form_submit_button("📤 Send Email", type="primary", use_container_width=True)
+            with col2:
+                cancel_btn = st.form_submit_button("❌ Cancel", use_container_width=True)
+
+            if cancel_btn:
+                st.session_state.show_email_form = False
+                st.rerun()
+
+            if send_btn:
+                if not email_to or not email_subject or not email_body:
+                    st.error("❌ Please fill all fields")
+                else:
+                    # Send via Gmail API
+                    try:
+                        from google.oauth2.credentials import Credentials
+
+                        # Pre-check: verify token exists and is valid before calling send
+                        token_path = os.getenv("GMAIL_TOKEN_PATH", ".secrets/gmail_token.json")
+                        token_file = Path(token_path)
+                        if not token_file.exists():
+                            st.error("❌ Gmail token not found. Run the Gmail watcher first to authorize.")
+                        else:
+                            creds = Credentials.from_authorized_user_file(str(token_file))
+                            if creds and creds.expired and creds.refresh_token:
+                                from google.auth.transport.requests import Request
+                                creds.refresh(Request())
+                            if not creds or not creds.valid:
+                                st.error("❌ Gmail token expired. Run Gmail watcher to re-authorize.")
+                            else:
+                                from src.utils.email_sender import send_email
+                                result = send_email(email_to, email_subject, email_body)
+                                # Gmail API returns dict with 'id' and 'threadId' on success
+                                if result and result.get("id"):
+                                    st.success(f"✅ Email sent to {email_to}! (ID: {result['id'][:12]}...)")
+                                    st.session_state.show_email_form = False
+                                    st.session_state.email_sent = True
+                                else:
+                                    st.error(f"❌ Failed to send email")
+                    except ImportError as e:
+                        st.warning(f"📧 Email module not available: {e}")
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
+
+    if st.session_state.email_sent:
+        st.success("✅ Email sent successfully!")
+        if st.button("📝 Send Another", key="send_another"):
+            st.session_state.email_sent = False
+            st.session_state.show_email_form = True
+            st.rerun()
 
     st.divider()
 
@@ -1512,8 +1702,11 @@ def render_logs():
         for log_file in log_files[:50]:  # Sample first 50 for performance
             try:
                 data = json.loads(log_file.read_text())
-                if "action_type" in data:
-                    action_types.add(data["action_type"])
+                # Handle both array and single object formats
+                entries = data if isinstance(data, list) else [data]
+                for entry in entries:
+                    if isinstance(entry, dict) and "action_type" in entry:
+                        action_types.add(entry["action_type"])
             except Exception:
                 pass
 
@@ -1538,52 +1731,60 @@ def render_logs():
             break
 
         try:
-            data = json.loads(log_file.read_text())
+            raw_data = json.loads(log_file.read_text())
+            # Handle both array and single object formats
+            entries = raw_data if isinstance(raw_data, list) else [raw_data]
 
-            # Apply action filter
-            if action_filter != "All" and data.get("action_type") != action_filter:
-                continue
+            for data in entries:
+                if displayed >= limit:
+                    break
+                if not isinstance(data, dict):
+                    continue
 
-            displayed += 1
+                # Apply action filter
+                if action_filter != "All" and data.get("action_type") != action_filter:
+                    continue
 
-            # Determine status color
-            status = data.get("status", "unknown")
-            if status == "success":
-                status_icon = "🟢"
-            elif status == "error":
-                status_icon = "🔴"
-            elif status == "pending":
-                status_icon = "🟡"
-            else:
-                status_icon = "⚪"
+                displayed += 1
 
-            # Create expander title
-            timestamp = data.get("timestamp", "")[:19].replace("T", " ")
-            action = data.get("action_type", "unknown").replace("_", " ").title()
-            source = data.get("source", "unknown")
+                # Determine status color
+                status = data.get("status", "unknown")
+                if status == "success":
+                    status_icon = "🟢"
+                elif status == "error":
+                    status_icon = "🔴"
+                elif status == "pending":
+                    status_icon = "🟡"
+                else:
+                    status_icon = "⚪"
 
-            title = f"{status_icon} {timestamp} — {action} ({source})"
+                # Create expander title
+                timestamp = data.get("timestamp", "")[:19].replace("T", " ")
+                action = data.get("action_type", "unknown").replace("_", " ").title()
+                source = data.get("source", "unknown")
 
-            with st.expander(title):
-                col1, col2 = st.columns([1, 1])
+                title = f"{status_icon} {timestamp} — {action} ({source})"
 
-                with col1:
-                    st.markdown("**Details**")
-                    st.write(f"**Action**: {data.get('action_type', 'N/A')}")
-                    st.write(f"**Source**: {data.get('source', 'N/A')}")
-                    st.write(f"**Status**: {data.get('status', 'N/A')}")
-                    st.write(f"**Target**: {data.get('target_file', 'N/A')}")
+                with st.expander(title):
+                    col1, col2 = st.columns([1, 1])
 
-                with col2:
-                    st.markdown("**Metadata**")
-                    st.write(f"**Timestamp**: {data.get('timestamp', 'N/A')}")
-                    st.write(f"**Duration**: {data.get('duration_ms', 'N/A')} ms")
-                    st.write(f"**MCP Server**: {data.get('mcp_server', 'N/A')}")
-                    st.write(f"**Workflow ID**: {data.get('workflow_id', 'N/A')}")
+                    with col1:
+                        st.markdown("**Details**")
+                        st.write(f"**Action**: {data.get('action_type', 'N/A')}")
+                        st.write(f"**Source**: {data.get('source', 'N/A')}")
+                        st.write(f"**Status**: {data.get('status', 'N/A')}")
+                        st.write(f"**Target**: {data.get('target_file', 'N/A')}")
 
-                # Show full JSON in collapsed section
-                with st.expander("📄 View Full JSON"):
-                    st.json(data)
+                    with col2:
+                        st.markdown("**Metadata**")
+                        st.write(f"**Timestamp**: {data.get('timestamp', 'N/A')}")
+                        st.write(f"**Duration**: {data.get('duration_ms', 'N/A')} ms")
+                        st.write(f"**MCP Server**: {data.get('mcp_server', 'N/A')}")
+                        st.write(f"**Workflow ID**: {data.get('workflow_id', 'N/A')}")
+
+                    # Show full JSON in collapsed section
+                    with st.expander("📄 View Full JSON"):
+                        st.json(data)
 
         except Exception as e:
             st.error(f"Error reading {log_file.name}: {e}")
@@ -1660,8 +1861,13 @@ def render_ceo_briefing():
 
         st.divider()
 
-        # Display briefing content
-        st.markdown(content)
+        # Display briefing content (strip YAML frontmatter)
+        display_content = content
+        if display_content.strip().startswith("---"):
+            parts = display_content.strip().split("---", 2)
+            if len(parts) >= 3:
+                display_content = parts[2].strip()
+        st.markdown(display_content)
 
         st.divider()
 
@@ -1670,15 +1876,277 @@ def render_ceo_briefing():
 
         with col1:
             if st.button("📥 Download as PDF"):
-                st.info("PDF export coming soon")
+                try:
+                    from fpdf import FPDF
+
+                    pdf = FPDF()
+                    pdf.set_auto_page_break(auto=True, margin=20)
+
+                    # Use DejaVu font for Unicode support
+                    dejavu_path = Path("/usr/share/fonts/truetype/dejavu")
+                    if dejavu_path.exists() and (dejavu_path / "DejaVuSans.ttf").exists():
+                        pdf.add_font("DejaVu", "", str(dejavu_path / "DejaVuSans.ttf"))
+                        pdf.add_font("DejaVu", "B", str(dejavu_path / "DejaVuSans-Bold.ttf"))
+                        pdf.add_font("DejaVu", "I", str(dejavu_path / "DejaVuSans.ttf"))
+                        font_family = "DejaVu"
+                    else:
+                        font_family = "Helvetica"
+
+                    def safe_text(text):
+                        return text.replace("\u2014", "-").replace("\u2013", "-").replace("\u2018", "'").replace("\u2019", "'").replace("\u201c", '"').replace("\u201d", '"').replace("\u2026", "...").replace("\u2022", "-")
+
+                    pdf.add_page()
+
+                    # Header
+                    pdf.set_font(font_family, "B", 20)
+                    pdf.set_text_color(30, 30, 60)
+                    pdf.cell(0, 15, "CEO Briefing", new_x="LMARGIN", new_y="NEXT", align="C")
+                    pdf.set_font(font_family, "", 11)
+                    pdf.set_text_color(100, 100, 100)
+                    pdf.cell(0, 8, f"Generated: {file_date.strftime('%B %d, %Y')}", new_x="LMARGIN", new_y="NEXT", align="C")
+                    pdf.ln(5)
+                    pdf.set_draw_color(50, 50, 120)
+                    pdf.set_line_width(0.5)
+                    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+                    pdf.ln(8)
+
+                    # Parse markdown content
+                    # Strip YAML frontmatter
+                    pdf_content = content
+                    if pdf_content.strip().startswith("---"):
+                        parts = pdf_content.strip().split("---", 2)
+                        if len(parts) >= 3:
+                            pdf_content = parts[2]
+
+                    for line in pdf_content.split("\n"):
+                        s = line.strip()
+                        if not s:
+                            pdf.ln(3)
+                            continue
+                        s = safe_text(s)
+
+                        if s.startswith("# "):
+                            pdf.set_font(font_family, "B", 16)
+                            pdf.set_text_color(30, 30, 60)
+                            pdf.cell(0, 10, s[2:], new_x="LMARGIN", new_y="NEXT")
+                        elif s.startswith("## "):
+                            pdf.ln(3)
+                            pdf.set_font(font_family, "B", 14)
+                            pdf.set_text_color(40, 40, 100)
+                            pdf.cell(0, 9, s[3:], new_x="LMARGIN", new_y="NEXT")
+                        elif s.startswith("### "):
+                            pdf.set_font(font_family, "B", 12)
+                            pdf.set_text_color(60, 60, 120)
+                            pdf.cell(0, 8, s[4:], new_x="LMARGIN", new_y="NEXT")
+                        elif s.startswith("|") and s.endswith("|"):
+                            cells = [c.strip() for c in s.split("|")[1:-1]]
+                            if all(set(c) <= set("- :") for c in cells):
+                                continue
+                            num_cells = max(len(cells), 1)
+                            col_width = 180 / num_cells
+                            pdf.set_font(font_family, "", 9)
+                            pdf.set_text_color(50, 50, 50)
+                            for cell in cells:
+                                bold = cell.startswith("**") and cell.endswith("**")
+                                if bold:
+                                    pdf.set_font(font_family, "B", 9)
+                                    cell = cell.strip("*")
+                                pdf.cell(col_width, 7, safe_text(cell[:40]), border=1, align="C")
+                                if bold:
+                                    pdf.set_font(font_family, "", 9)
+                            pdf.ln()
+                        elif s.startswith("- ") or s.startswith("* "):
+                            pdf.set_font(font_family, "", 10)
+                            pdf.set_text_color(50, 50, 50)
+                            text = s[2:].replace("**", "")
+                            pdf.cell(0, 6, safe_text(f"  {chr(8226)} {text}"), new_x="LMARGIN", new_y="NEXT")
+                        elif len(s) > 2 and s[0].isdigit() and s[1] in ".)":
+                            pdf.set_font(font_family, "", 10)
+                            pdf.set_text_color(50, 50, 50)
+                            pdf.cell(0, 6, safe_text(s), new_x="LMARGIN", new_y="NEXT")
+                        elif s.startswith("_") and s.endswith("_"):
+                            pdf.set_font(font_family, "I", 10)
+                            pdf.set_text_color(100, 100, 100)
+                            pdf.cell(0, 6, safe_text(s.strip("_")), new_x="LMARGIN", new_y="NEXT")
+                        elif s.startswith("**") and s.endswith("**"):
+                            pdf.set_font(font_family, "B", 11)
+                            pdf.set_text_color(40, 40, 40)
+                            pdf.cell(0, 6, safe_text(s.strip("*")), new_x="LMARGIN", new_y="NEXT")
+                        else:
+                            pdf.set_font(font_family, "", 10)
+                            pdf.set_text_color(50, 50, 50)
+                            clean = s.replace("**", "").replace("*", "")
+                            pdf.cell(0, 6, safe_text(clean), new_x="LMARGIN", new_y="NEXT")
+
+                    # Footer
+                    pdf.ln(10)
+                    pdf.set_draw_color(50, 50, 120)
+                    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+                    pdf.ln(5)
+                    pdf.set_font(font_family, "I", 9)
+                    pdf.set_text_color(130, 130, 130)
+                    pdf.cell(0, 6, "Generated by FTE AI Employee Dashboard | Powered by Claude Opus 4.6", align="C")
+
+                    # Download button
+                    pdf_filename = selected_briefing.replace(".md", ".pdf")
+                    pdf_bytes = bytes(pdf.output())
+                    st.download_button(
+                        label="💾 Save PDF",
+                        data=pdf_bytes,
+                        file_name=pdf_filename,
+                        mime="application/pdf",
+                    )
+                except Exception as e:
+                    st.error(f"PDF generation error: {e}")
 
         with col2:
             if st.button("📧 Email Briefing"):
-                st.info("Email sending via MCP server")
+                st.session_state.show_briefing_email = True
 
         with col3:
             if st.button("📊 Generate New Briefing"):
-                st.info("Trigger via orchestrator")
+                try:
+                    from src.utils.ceo_briefing import CEOBriefingGenerator
+                    generator = CEOBriefingGenerator(vault_path=VAULT_PATH)
+                    result_path = generator.generate()
+                    if result_path and result_path.exists():
+                        st.success(f"✅ New briefing generated: {result_path.name}")
+                        st.rerun()
+                    else:
+                        st.warning("Briefing generation returned no result")
+                except Exception as e:
+                    st.error(f"Error generating briefing: {e}")
+
+        # Email Briefing Form
+        if st.session_state.get("show_briefing_email", False):
+            with st.form("briefing_email_form"):
+                st.markdown("### 📧 Email CEO Briefing")
+                briefing_to = st.text_input("To", placeholder="ceo@company.com")
+                send_briefing = st.form_submit_button("📨 Send Briefing", type="primary")
+                cancel_briefing = st.form_submit_button("❌ Cancel")
+
+                if cancel_briefing:
+                    st.session_state.show_briefing_email = False
+                    st.rerun()
+
+                if send_briefing:
+                    if not briefing_to:
+                        st.error("❌ Please enter email address")
+                    else:
+                        try:
+                            from google.oauth2.credentials import Credentials
+                            from google.auth.transport.requests import Request
+
+                            token_path = os.getenv("GMAIL_TOKEN_PATH", ".secrets/gmail_token.json")
+                            token_file = Path(token_path)
+                            if not token_file.exists():
+                                st.error("❌ Gmail token not found. Authorize Gmail first.")
+                            else:
+                                creds = Credentials.from_authorized_user_file(str(token_file))
+                                if creds and creds.expired and creds.refresh_token:
+                                    creds.refresh(Request())
+                                if not creds or not creds.valid:
+                                    st.error("❌ Gmail token expired. Re-authorize Gmail.")
+                                else:
+                                    from src.utils.email_sender import send_email
+                                    from fpdf import FPDF
+
+                                    briefing_date = file_date.strftime("%B %d, %Y")
+                                    subject = f"CEO Briefing - {briefing_date}"
+
+                                    # Generate PDF attachment
+                                    pdf = FPDF()
+                                    pdf.set_auto_page_break(auto=True, margin=20)
+                                    dejavu_p = Path("/usr/share/fonts/truetype/dejavu")
+                                    if dejavu_p.exists() and (dejavu_p / "DejaVuSans.ttf").exists():
+                                        pdf.add_font("DejaVu", "", str(dejavu_p / "DejaVuSans.ttf"))
+                                        pdf.add_font("DejaVu", "B", str(dejavu_p / "DejaVuSans-Bold.ttf"))
+                                        pdf.add_font("DejaVu", "I", str(dejavu_p / "DejaVuSans.ttf"))
+                                        ff = "DejaVu"
+                                    else:
+                                        ff = "Helvetica"
+
+                                    def _safe(t):
+                                        return t.replace("\u2014", "-").replace("\u2013", "-")
+
+                                    pdf_content = content
+                                    if pdf_content.strip().startswith("---"):
+                                        pp = pdf_content.strip().split("---", 2)
+                                        if len(pp) >= 3:
+                                            pdf_content = pp[2]
+
+                                    pdf.add_page()
+                                    pdf.set_font(ff, "B", 20); pdf.set_text_color(30, 30, 60)
+                                    pdf.cell(0, 15, "CEO Briefing", new_x="LMARGIN", new_y="NEXT", align="C")
+                                    pdf.set_font(ff, "", 11); pdf.set_text_color(100, 100, 100)
+                                    pdf.cell(0, 8, f"Generated: {briefing_date}", new_x="LMARGIN", new_y="NEXT", align="C")
+                                    pdf.ln(5); pdf.set_draw_color(50, 50, 120); pdf.line(15, pdf.get_y(), 195, pdf.get_y()); pdf.ln(8)
+
+                                    for ln in pdf_content.split("\n"):
+                                        sl = ln.strip()
+                                        if not sl:
+                                            pdf.ln(3); continue
+                                        sl = _safe(sl)
+                                        if sl.startswith("# "):
+                                            pdf.set_font(ff, "B", 16); pdf.set_text_color(30, 30, 60); pdf.cell(0, 10, sl[2:], new_x="LMARGIN", new_y="NEXT")
+                                        elif sl.startswith("## "):
+                                            pdf.ln(3); pdf.set_font(ff, "B", 14); pdf.set_text_color(40, 40, 100); pdf.cell(0, 9, sl[3:], new_x="LMARGIN", new_y="NEXT")
+                                        elif sl.startswith("### "):
+                                            pdf.set_font(ff, "B", 12); pdf.set_text_color(60, 60, 120); pdf.cell(0, 8, sl[4:], new_x="LMARGIN", new_y="NEXT")
+                                        elif sl.startswith("|") and sl.endswith("|"):
+                                            cells = [c.strip() for c in sl.split("|")[1:-1]]
+                                            if all(set(c) <= set("- :") for c in cells): continue
+                                            cw = 180 / max(len(cells), 1)
+                                            pdf.set_font(ff, "", 9); pdf.set_text_color(50, 50, 50)
+                                            for cl in cells:
+                                                bd = cl.startswith("**") and cl.endswith("**")
+                                                if bd: pdf.set_font(ff, "B", 9); cl = cl.strip("*")
+                                                pdf.cell(cw, 7, _safe(cl[:40]), border=1, align="C")
+                                                if bd: pdf.set_font(ff, "", 9)
+                                            pdf.ln()
+                                        elif sl.startswith("- ") or sl.startswith("* "):
+                                            pdf.set_font(ff, "", 10); pdf.set_text_color(50, 50, 50)
+                                            pdf.cell(0, 6, _safe(f"  {chr(8226)} {sl[2:].replace('**', '')}"), new_x="LMARGIN", new_y="NEXT")
+                                        elif sl.startswith("_") and sl.endswith("_"):
+                                            pdf.set_font(ff, "I", 10); pdf.set_text_color(100, 100, 100)
+                                            pdf.cell(0, 6, _safe(sl.strip("_")), new_x="LMARGIN", new_y="NEXT")
+                                        else:
+                                            pdf.set_font(ff, "", 10); pdf.set_text_color(50, 50, 50)
+                                            pdf.cell(0, 6, _safe(sl.replace("**", "").replace("*", "")), new_x="LMARGIN", new_y="NEXT")
+
+                                    pdf.ln(10); pdf.set_draw_color(50, 50, 120); pdf.line(15, pdf.get_y(), 195, pdf.get_y()); pdf.ln(5)
+                                    pdf.set_font(ff, "I", 9); pdf.set_text_color(130, 130, 130)
+                                    pdf.cell(0, 6, "Generated by FTE AI Employee Dashboard | Powered by Claude Opus 4.6", align="C")
+
+                                    pdf_bytes = bytes(pdf.output())
+                                    pdf_name = f"CEO_Briefing_{briefing_date.replace(' ', '_').replace(',', '')}.pdf"
+
+                                    # Short professional email body
+                                    email_body = f"""Hi,
+
+Please find attached the CEO Briefing for {briefing_date}.
+
+This report includes:
+- Financial Summary
+- Social Media Performance (Facebook, Instagram, LinkedIn)
+- Communications Overview (Email, WhatsApp)
+- Action Items & Recommendations
+
+Best regards,
+FTE AI Employee
+Powered by Claude Opus 4.6"""
+
+                                    result = send_email(
+                                        briefing_to, subject, email_body,
+                                        attachment=pdf_bytes, attachment_name=pdf_name
+                                    )
+                                    if result and result.get("id"):
+                                        st.success(f"✅ Briefing emailed to {briefing_to}!")
+                                        st.session_state.show_briefing_email = False
+                                    else:
+                                        st.error("❌ Failed to send email")
+                        except Exception as e:
+                            st.error(f"❌ Error: {e}")
 
     except Exception as e:
         st.error(f"Error loading briefing: {e}")

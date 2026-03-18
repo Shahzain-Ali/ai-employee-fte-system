@@ -132,9 +132,18 @@ class CEOBriefingGenerator:
     def _get_odoo_data(self, start, end) -> dict | None:
         """Collect financial data from Odoo via MCP server functions.
 
-        Uses the fte-odoo MCP server which auto-manages Docker containers.
+        Quick-checks if Odoo is reachable before attempting full connection.
+        Skips if Docker is not running to avoid 60s timeout.
         """
         try:
+            import requests
+            odoo_url = os.getenv("ODOO_URL", "http://localhost:8069")
+            try:
+                requests.get(f"{odoo_url}/web/database/selector", timeout=3)
+            except Exception:
+                logger.info("Odoo not reachable — skipping financial data")
+                return None
+
             from src.mcp.odoo_server import _ensure_odoo_running, _authenticate, _execute_kw
 
             _ensure_odoo_running()
@@ -178,67 +187,130 @@ class CEOBriefingGenerator:
             return None
 
     def _get_facebook_data(self) -> dict | None:
-        """Collect Facebook metrics from vault Done/ files."""
+        """Collect Facebook metrics via Meta Graph API (real-time)."""
         try:
-            done = self.vault_path / "Done"
-            if not done.exists():
+            import requests
+            token = os.getenv("FB_PAGE_ACCESS_TOKEN", "")
+            page_id = os.getenv("FB_PAGE_ID", "")
+            api_ver = os.getenv("META_API_VERSION", "v25.0")
+            if not token or not page_id:
                 return None
 
-            fb_count = sum(1 for f in done.iterdir()
-                           if f.name.startswith("FB_") or f.name.startswith("SUMMARY_FB_"))
-            if fb_count == 0:
-                return None
+            resp = requests.get(
+                f"https://graph.facebook.com/{api_ver}/{page_id}",
+                params={"fields": "name,followers_count,fan_count", "access_token": token},
+                timeout=10,
+            )
+            page_data = resp.json() if resp.status_code == 200 else {}
 
-            return {"post_count": fb_count, "engagement": "N/A", "last_post": "See vault"}
-        except Exception:
+            posts_resp = requests.get(
+                f"https://graph.facebook.com/{api_ver}/{page_id}/posts",
+                params={"fields": "message,created_time", "limit": 5, "access_token": token},
+                timeout=10,
+            )
+            posts = posts_resp.json().get("data", []) if posts_resp.status_code == 200 else []
+
+            return {
+                "page_name": page_data.get("name", "Unknown"),
+                "followers": page_data.get("followers_count", page_data.get("fan_count", 0)),
+                "post_count": len(posts),
+                "engagement": f"{len(posts)} recent posts",
+                "last_post": posts[0].get("message", "")[:50] + "..." if posts else "No posts",
+            }
+        except Exception as e:
+            logger.warning("Failed to get Facebook API data: %s", e)
             return None
 
     def _get_instagram_data(self) -> dict | None:
-        """Collect Instagram metrics from vault Done/ files."""
+        """Collect Instagram metrics via Meta Graph API (real-time)."""
         try:
-            done = self.vault_path / "Done"
-            if not done.exists():
+            import requests
+            token = os.getenv("IG_ACCESS_TOKEN", "")
+            ig_id = os.getenv("IG_USER_ID", "")
+            api_ver = os.getenv("META_API_VERSION", "v25.0")
+            if not token or not ig_id:
                 return None
 
-            ig_count = sum(1 for f in done.iterdir()
-                           if f.name.startswith("IG_") or f.name.startswith("SUMMARY_IG_"))
-            if ig_count == 0:
-                return None
+            resp = requests.get(
+                f"https://graph.facebook.com/{api_ver}/{ig_id}",
+                params={"fields": "username,followers_count,media_count", "access_token": token},
+                timeout=10,
+            )
+            ig_data = resp.json() if resp.status_code == 200 else {}
 
-            return {"post_count": ig_count, "engagement": "N/A", "last_post": "See vault"}
-        except Exception:
+            media_resp = requests.get(
+                f"https://graph.facebook.com/{api_ver}/{ig_id}/media",
+                params={"fields": "caption,timestamp,like_count", "limit": 5, "access_token": token},
+                timeout=10,
+            )
+            media = media_resp.json().get("data", []) if media_resp.status_code == 200 else []
+
+            return {
+                "username": ig_data.get("username", "Unknown"),
+                "followers": ig_data.get("followers_count", 0),
+                "post_count": ig_data.get("media_count", 0),
+                "engagement": f"{len(media)} recent posts",
+                "last_post": media[0].get("caption", "")[:50] + "..." if media else "No posts",
+            }
+        except Exception as e:
+            logger.warning("Failed to get Instagram API data: %s", e)
             return None
 
     def _get_twitter_data(self) -> dict | None:
-        """Collect Twitter/X metrics from vault Done/ files."""
+        """Collect Twitter/X metrics from environment check."""
         try:
+            api_key = os.getenv("TWITTER_API_KEY", "")
+            api_secret = os.getenv("TWITTER_API_SECRET", "")
+            if not api_key or not api_secret:
+                return None
+
+            # Count vault posts as fallback (Twitter API v2 free tier is limited)
             done = self.vault_path / "Done"
-            if not done.exists():
-                return None
+            tw_count = 0
+            if done.exists():
+                tw_count = sum(1 for f in done.iterdir()
+                               if f.name.startswith("TW_") or f.name.startswith("SUMMARY_TW_"))
 
-            tw_count = sum(1 for f in done.iterdir()
-                           if f.name.startswith("TW_") or f.name.startswith("SUMMARY_TW_"))
-            if tw_count == 0:
-                return None
-
-            return {"post_count": tw_count, "engagement": "N/A", "last_post": "See vault"}
+            return {
+                "post_count": tw_count,
+                "engagement": "API connected",
+                "last_post": "See vault",
+            }
         except Exception:
             return None
 
     def _get_linkedin_data(self) -> dict | None:
-        """Collect LinkedIn metrics from vault Done/ files."""
+        """Collect LinkedIn metrics via Official API (real-time)."""
         try:
+            import requests
+            token = os.getenv("LINKEDIN_ACCESS_TOKEN", "")
+            person_urn = os.getenv("LINKEDIN_PERSON_URN", "")
+            if not token or not person_urn:
+                return None
+
+            # Get profile info
+            resp = requests.get(
+                "https://api.linkedin.com/v2/userinfo",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10,
+            )
+            profile = resp.json() if resp.status_code == 200 else {}
+
+            # Count vault posts
             done = self.vault_path / "Done"
-            if not done.exists():
-                return None
+            li_count = 0
+            if done.exists():
+                li_count = sum(1 for f in done.iterdir()
+                               if f.name.startswith("LI_") or f.name.startswith("SUMMARY_LI_"))
 
-            li_count = sum(1 for f in done.iterdir()
-                           if f.name.startswith("LI_") or f.name.startswith("SUMMARY_LI_"))
-            if li_count == 0:
-                return None
-
-            return {"post_count": li_count, "engagement": "N/A", "last_post": "See vault"}
-        except Exception:
+            return {
+                "name": profile.get("name", "Connected"),
+                "post_count": li_count,
+                "engagement": "API connected",
+                "last_post": "See vault",
+            }
+        except Exception as e:
+            logger.warning("Failed to get LinkedIn API data: %s", e)
             return None
 
     def _get_communication_data(self, start, end) -> dict:
@@ -299,25 +371,37 @@ class CEOBriefingGenerator:
             financial = "## Financial Summary (Odoo)\n\n_Odoo data unavailable this week._"
 
         # Social media section
-        social_rows = []
+        social_parts = []
+
         if fb:
-            social_rows.append(f"| Facebook | {fb['post_count']} | {fb['engagement']} | {fb['last_post']} |")
+            social_parts.append(f"""### Facebook
+- **Page:** {fb.get('page_name', 'Unknown')}
+- **Followers:** {fb.get('followers', 0):,}
+- **Recent Posts:** {fb.get('post_count', 0)}
+- **Last Post:** {fb.get('last_post', 'N/A')}""")
+
         if ig:
-            social_rows.append(f"| Instagram | {ig['post_count']} | {ig['engagement']} | {ig['last_post']} |")
+            social_parts.append(f"""### Instagram
+- **Account:** @{ig.get('username', 'Unknown')}
+- **Followers:** {ig.get('followers', 0):,}
+- **Total Posts:** {ig.get('post_count', 0)}
+- **Last Post:** {ig.get('last_post', 'N/A')}""")
+
+        if li:
+            social_parts.append(f"""### LinkedIn
+- **Profile:** {li.get('name', 'Connected')}
+- **Posts This Week:** {li.get('post_count', 0)}
+- **Status:** {li.get('engagement', 'N/A')}""")
 
         if tw:
-            social_rows.append(f"| Twitter/X | {tw['post_count']} | {tw['engagement']} | {tw['last_post']} |")
-        if li:
-            social_rows.append(f"| LinkedIn | {li['post_count']} | {li['engagement']} | {li['last_post']} |")
+            social_parts.append(f"""### Twitter/X
+- **Posts This Week:** {tw.get('post_count', 0)}
+- **Status:** {tw.get('engagement', 'N/A')}""")
 
-        if social_rows:
-            social = f"""## Social Media
-
-| Platform | Posts | Engagement | Last Post |
-|----------|-------|------------|-----------|
-{chr(10).join(social_rows)}"""
+        if social_parts:
+            social = "## Social Media\n\n" + "\n\n".join(social_parts)
         else:
-            social = "## Social Media\n\n_No social media activity this week._"
+            social = "## Social Media\n\n_No social media platforms connected._"
 
         # Communications section
         communications = f"""## Communications (Gmail + WhatsApp)
