@@ -110,6 +110,18 @@ delivers a working, demonstrable AI Employee before adding more capabilities.
 - Payment actions MUST NEVER be auto-retried — always require fresh human approval
 - Rate limits MUST be enforced: max 10 emails/hour, max 3 payments/day (auto-approve)
 
+### Sensitive Files — AI Agent Restrictions
+AI agents (Claude Code, MCP tools, or any automated process) MUST NEVER:
+- **Read or display** `.env`, `.secrets/*`, or any file containing credentials/tokens
+- **Log, store, or expose** OAuth codes, access tokens, refresh tokens, or client secrets
+- **Commit to git** any file in `.secrets/` directory
+- **Display contents** of credential JSON files (e.g., `gmail_credentials.json`, `gmail_token.json`)
+
+AI agents MAY only:
+- Reference file **paths** and environment variable **names** (not values)
+- Run scripts that **use** credentials internally without exposing them
+- Tell the user which variables to add/update in `.env`
+
 ## Development Workflow
 
 1. **Research**: Read official docs and hackathon documentation before any task

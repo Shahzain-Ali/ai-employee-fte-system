@@ -24,6 +24,7 @@ dependencies = [
     # Platinum — Cloud/Local orchestration
     "pyyaml>=6.0",
     "psutil>=5.9.0",
+    "fpdf2>=2.8.7",
 ]
 
 [project.optional-dependencies]

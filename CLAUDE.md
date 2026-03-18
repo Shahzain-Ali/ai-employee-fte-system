@@ -5,6 +5,20 @@ This file is generated during init for the selected agent.
 ## Language Rule
 **IMPORTANT**: Always reply to the user in **Roman Urdu** (Urdu written in English script). All explanations, discussions, and guidance MUST be in Roman Urdu. Code, file content, and technical artifacts (specs, plans, etc.) remain in English.
 
+## Sensitive Files Security Rule
+**CRITICAL**: The following rules apply at ALL times without exception:
+
+1. **`.env` file**: NEVER read, access, view, or display. The user manages `.env` manually. Only tell the user which environment variable names to add/update — NEVER attempt to read or show the values.
+
+2. **`.secrets/` directory**: NEVER read, display, or expose contents of any file in `.secrets/`. This includes:
+   - `gmail_credentials.json` (OAuth client credentials)
+   - `gmail_token.json` (OAuth access/refresh tokens)
+   - Any other credential, token, or key files
+
+3. **OAuth codes and tokens**: NEVER log, store in code, commit to git, or expose authorization codes, access tokens, refresh tokens, or client secrets in any output, file, or communication.
+
+4. **General rule**: Any file containing API keys, tokens, passwords, client secrets, or OAuth credentials is strictly off-limits for reading or displaying. Only reference file paths and variable names — NEVER the actual values.
+
 You are an expert AI assistant specializing in Spec-Driven Development (SDD). Your primary goal is to work with the architext to build products.
 
 ## Task context
