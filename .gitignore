@@ -41,6 +41,12 @@ node_modules/
 # Platinum Tier — vault is a separate private repo
 vault/
 
+# Learning & reference material — local only, not for repo
+docs/
+Learning/
+Setup_Videos/
+*.pdf
+
 # OS
 .DS_Store
 Thumbs.db
