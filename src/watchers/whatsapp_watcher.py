@@ -110,9 +110,15 @@ class WhatsAppWatcher(BaseWatcher):
 
         self._playwright = sync_playwright().start()
 
+        # Use real Chrome user-agent to prevent WhatsApp blocking headless browsers
+        chrome_ua = (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+        )
         self._context = self._playwright.chromium.launch_persistent_context(
             user_data_dir=str(self._session_path),
             headless=self._headless,
+            user_agent=chrome_ua,
             args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
         )
         stealth = Stealth()
@@ -205,6 +211,9 @@ class WhatsAppWatcher(BaseWatcher):
             # Process any queued replies (from approval handler)
             self._process_reply_queue()
 
+            # Process file-based queue (from MCP WhatsApp server)
+            self._process_file_queue()
+
             time.sleep(self._poll_interval)
 
         self._cleanup()
@@ -223,6 +232,55 @@ class WhatsAppWatcher(BaseWatcher):
             "callback": callback,
         })
         logger.info("Reply queued for %s", sender_name)
+
+    def _process_file_queue(self) -> None:
+        """Process file-based send requests from MCP WhatsApp server.
+
+        MCP server writes JSON files to .state/whatsapp_queue/send_*.json.
+        Watcher sends using its open browser and writes result back.
+        """
+        queue_dir = Path(".state/whatsapp_queue")
+        if not queue_dir.exists():
+            return
+
+        for req_file in sorted(queue_dir.glob("send_*.json")):
+            try:
+                request = json.loads(req_file.read_text(encoding="utf-8"))
+                if request.get("status") != "pending":
+                    continue
+
+                contact = request["contact_name"]
+                message = request["message"]
+                request_id = request["id"]
+
+                logger.info("Processing queued WhatsApp send to '%s'", contact)
+                result = self.send_reply(sender_name=contact, message=message)
+
+                # Write result file for MCP server to pick up
+                result_file = queue_dir / f"result_{request_id}.json"
+                result_file.write_text(
+                    json.dumps({"status": "sent", "sender": contact}, indent=2),
+                    encoding="utf-8",
+                )
+
+                # Remove request file
+                req_file.unlink(missing_ok=True)
+                logger.info("Queued WhatsApp message sent to '%s'", contact)
+
+            except Exception as e:
+                logger.error("Failed to process queued send %s: %s", req_file.name, e)
+                # Write failure result
+                try:
+                    request = json.loads(req_file.read_text(encoding="utf-8"))
+                    request_id = request.get("id", "unknown")
+                    result_file = queue_dir / f"result_{request_id}.json"
+                    result_file.write_text(
+                        json.dumps({"status": "failed", "error": str(e)}, indent=2),
+                        encoding="utf-8",
+                    )
+                    req_file.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     def _process_reply_queue(self) -> None:
         """Process all pending replies from the queue (runs in watcher thread)."""
@@ -261,7 +319,7 @@ class WhatsAppWatcher(BaseWatcher):
 
         # Click search box and search for contact
         search_box = self._page.wait_for_selector(
-            '[aria-label="Search input textbox"]',
+            '[aria-label="Search or start a new chat"]',
             timeout=10000,
         )
         if not search_box:

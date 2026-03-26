@@ -30,11 +30,39 @@ EMAIL_*.md file detected in Needs_Action/
    - Extract: client/partner name, line items (description + amount), due date
    - Use the `create_invoice` MCP tool (fte-odoo) to create the invoice in Odoo
    - Note the invoice ID and amount from the result
-   - Draft a reply email confirming the invoice was created, include invoice ID and total
-   - Use the `send_email_tool` MCP tool (fte-email) to send the reply directly — NO approval needed
+   - **Download invoice PDF**: Use the `get_invoice_pdf` MCP tool (fte-odoo) with the invoice ID
+     - This returns a local file path to the PDF (e.g., `/tmp/fte_invoices/INV-2026-00001.pdf`)
+   - Draft a brief professional reply email — DO NOT repeat line items or amounts in the body (the PDF has all details)
+   - **Email body format** (industry standard — concise, professional):
+     ```
+     Dear {sender_name},
+
+     Thank you for your request. Please find the attached invoice for your review.
+
+     Invoice #: {invoice_name}
+     Total Amount: PKR {total}
+     Due Date: {due_date}
+
+     Should you have any questions or require modifications, please do not hesitate to reach out.
+
+     Best regards,
+     Accounts Team
+     ```
+   - **Send reply with PDF attached**: Use the `send_email_tool` MCP tool (fte-email) with:
+     - `to`: sender's email
+     - `subject`: "Re: {original_subject} — Invoice #{invoice_name}"
+     - `body`: the brief confirmation text above (NOT the full line items)
+     - `attachment_path`: the PDF file path returned by `get_invoice_pdf`
    - This is auto-approved because: invoice is draft-only in Odoo (no money moves), and the reply is a factual confirmation
+   - If `get_invoice_pdf` fails: still send reply WITHOUT attachment, but include line items in body as fallback
    - If Odoo MCP fails: still send reply noting "invoice pending", log the error
    - If email send fails: log error, write summary noting reply was not sent
+   - **WhatsApp notification to Accounts Team**: After email is sent (or attempted), notify via WhatsApp:
+     - Use the `send_whatsapp_message` MCP tool (fte-whatsapp) with:
+       - `contact_name`: "Accounts Team"
+       - `message`: "✅ Invoice Created\nClient: {partner_name}\nAmount: PKR {total}\nInvoice #: {invoice_name}\nEmail sent with PDF attached."
+     - This is auto-approved (notification only, no sensitive action)
+     - If WhatsApp send fails: log warning, do NOT block the workflow
 5. If **regular reply needed** (no cross-domain):
    - Draft a professional reply (3-5 sentences max)
    - Check if sender is in approved contacts list

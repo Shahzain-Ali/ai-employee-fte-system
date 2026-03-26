@@ -2,9 +2,11 @@
   "mcpServers": {
     "fte-email": {
       "type": "stdio",
-      "command": "node",
+      "command": "uv",
       "args": [
-        "/mnt/e/hackathon-0/full-time-equivalent-project/src/mcp/index.js"
+        "run",
+        "python",
+        "src/mcp/email_server.py"
       ],
       "env": {}
     },
@@ -55,6 +57,16 @@
         "run",
         "python",
         "src/mcp/linkedin_server.py"
+      ],
+      "env": {}
+    },
+    "fte-whatsapp": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "src/mcp/whatsapp_server.py"
       ],
       "env": {}
     }

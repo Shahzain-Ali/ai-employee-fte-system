@@ -17,6 +17,144 @@ from src.utils.logger import AuditLogger, LogEntry
 
 logger = logging.getLogger(__name__)
 
+# Sender patterns to skip — automated/noreply emails that never need action
+SKIP_SENDER_PATTERNS: list[str] = [
+    "noreply",
+    "no-reply",
+    "no_reply",
+    "donotreply",
+    "do-not-reply",
+    "do_not_reply",
+    "notification@",
+    "notifications@",
+    "alert@",
+    "alerts@",
+    "security@",
+    "service@",
+    "support@",
+    "newsletter@",
+    "news@",
+    "digest@",
+    "mailer-daemon@",
+    "postmaster@",
+    "statement@",
+    "e.statement@",
+    "online@",
+    "hello@news.",
+    "hello@info.",
+    "hello@notify.",
+    "hello@mail.",
+    "promo",
+    "marketing@",
+    "updates@",
+    "info@mail.",
+    "info@email.",
+    "team@mail.",
+    "team@email.",
+    "team@m.",
+    "changelog@",
+    "community@",
+    "verify@",
+    "invoice+",
+    "topcompanies@",
+    "jobs-listings@",
+    "jobs@",
+    "compliance@",
+    "education-support@",
+    "product@email.",
+    "thehubspotteam@",
+    "hello@eraser.io",
+    "hello@sanity.io",
+    "ship@info.",
+    "email@email.",
+    "notify@",
+]
+
+# Domains to always skip — newsletters, automated services
+SKIP_DOMAINS: set[str] = {
+    "substack.com",
+    "beehiiv.com",
+    "mail.beehiiv.com",
+    "quora.com",
+    "rumble.com",
+    "ollama.com",
+    "facebookmail.com",
+    "mail.instagram.com",
+    "telenorbank.pk",
+    "nayapay.com",
+    "skool.com",
+    "news.railway.app",
+    "email.claude.com",
+    "promo1.bitget.com",
+    "naukrigulf.com",
+    "mail.anthropic.com",
+    "neon.tech",
+    "mail.replit.com",
+    "x.com",
+    "updates.resend.com",
+    "qdrant.io",
+    "linkedin.com",
+    "em.linkedin.com",
+    "indeed.com",
+    "algorand.foundation",
+    "faysalbank.com",
+    "smailer1.binance.com",
+    "binance.com",
+    "email.sadapay.pk",
+    "sadapay.pk",
+    "surveylama.com",
+    "notify.railway.app",
+    "try.anaconda.com",
+    "info.n8n.io",
+    "m.ngrok.com",
+    "t.upwork.com",
+    "peopleperhour.com",
+    "piaic.org",
+    "eraser.io",
+    "sanity.io",
+    "info.vercel.com",
+    "huggingface.co",
+    "email.shopify.com",
+    "auctane.com",
+    "stackblitz.com",
+}
+
+# Specific senders to always skip
+SKIP_SENDERS: set[str] = {
+    "noreply@github.com",
+    "support@github.com",
+    "noreply@medium.com",
+    "noreply@youtube.com",
+    "noreply@google.com",
+    "online@odoo.com",
+    "superteampak@gmail.com",
+    "google-cloud-compliance@google.com",
+    "ericsimons@stackblitz.com",
+    "steve@clerk.com",
+    "systems@clerk.com",
+    "braden@clerk.com",
+}
+
+
+def _is_skip_sender(email_addr: str) -> bool:
+    """Check if sender should be skipped (noreply, automated, promotional)."""
+    addr = email_addr.lower().strip()
+
+    # Exact sender match
+    if addr in SKIP_SENDERS:
+        return True
+
+    # Pattern match (substring in address)
+    if any(pattern in addr for pattern in SKIP_SENDER_PATTERNS):
+        return True
+
+    # Domain match (everything after @)
+    domain = addr.split("@", 1)[1] if "@" in addr else ""
+    if domain in SKIP_DOMAINS:
+        return True
+
+    return False
+
 
 class GmailWatcher(BaseWatcher):
     """Watches Gmail for unread important emails and creates EMAIL_*.md action files.
@@ -35,7 +173,10 @@ class GmailWatcher(BaseWatcher):
         super().__init__(vault_path)
         self._credentials_path = credentials_path or os.getenv("GMAIL_CREDENTIALS_PATH")
         self._token_path = token_path or os.getenv("GMAIL_TOKEN_PATH")
-        self._query = os.getenv("GMAIL_QUERY", "is:unread")
+        self._query = os.getenv(
+            "GMAIL_QUERY",
+            "is:unread category:primary",
+        )
         self._poll_interval = int(os.getenv("POLL_INTERVAL", "120"))
         self._service = None
         self._running = False
@@ -91,7 +232,7 @@ class GmailWatcher(BaseWatcher):
             results = (
                 self._service.users()
                 .messages()
-                .list(userId="me", q=self._query, maxResults=10)
+                .list(userId="me", q=self._query, maxResults=5)
                 .execute()
             )
         except Exception as e:
@@ -149,6 +290,20 @@ class GmailWatcher(BaseWatcher):
 
         from_raw = headers.get("from", "unknown")
         from_name, from_email = parseaddr(from_raw)
+
+        # Skip noreply/automated senders
+        if _is_skip_sender(from_email):
+            logger.debug("Skipping automated sender: %s", from_email)
+            # Mark as read so it doesn't keep appearing
+            try:
+                self._service.users().messages().modify(
+                    userId="me", id=message_id,
+                    body={"removeLabelIds": ["UNREAD"]},
+                ).execute()
+            except Exception:
+                pass
+            return None
+
         to_raw = headers.get("to", "unknown")
         subject = headers.get("subject", "(no subject)")
         date = headers.get("date", "")
