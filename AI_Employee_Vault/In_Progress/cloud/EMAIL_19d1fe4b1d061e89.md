@@ -51,9 +51,11 @@ John
 
 ## Draft Reply
 
+> **⚠️ DRAFT ONLY — NOT SENT. Awaiting execution approval.**
+
 **To**: shahzainalii859@gmail.com
-**Subject**: Re: Invoice Request - AI Automation Project — Invoice #{pending_invoice_name}
-**Attachment**: Invoice PDF (to be generated from Odoo)
+**Subject**: Re: Invoice Request - AI Automation Project
+**Attachment**: Invoice PDF (to be generated from Odoo upon execution)
 
 ---
 
@@ -61,7 +63,7 @@ Dear John,
 
 Thank you for your request. Please find the attached invoice for your review.
 
-Invoice #: {pending — to be generated via Odoo}
+Invoice #: *(to be generated via Odoo)*
 Total Amount: $5,000.00
 Due Date: April 30, 2026
 
@@ -72,21 +74,23 @@ Accounts Team
 
 ---
 
-### Cross-Domain Actions Required (when approved to send)
+### Cross-Domain Actions Required (when approved to execute)
 
 1. **Odoo — Create Invoice**:
    - Partner: Tech Solutions Inc.
+   - Contact: John Smith
    - Line items: `[{"description": "AI Automation Project", "price_unit": 5000}]`
    - Due date: 2026-04-30
    - Currency: USD
 2. **Odoo — Download Invoice PDF**: Use `get_invoice_pdf` with created invoice ID
-3. **Email — Send Reply**: Use `send_email_tool` with PDF attachment
+3. **Email — Send Reply**: Use `send_email_tool` with PDF attachment to shahzainalii859@gmail.com
 4. **WhatsApp — Notify Accounts Team**: Invoice created notification
 
 ### Approval Status
 
-- **Invoice creation + email reply**: AUTO-APPROVED (per Company Handbook — draft invoice only, no money moves)
+- **Invoice creation + email reply**: AUTO-APPROVED per Company Handbook (draft invoice only, no money moves)
 - **WhatsApp notification**: AUTO-APPROVED (notification only)
+- **Current state**: DRAFT — no actions executed yet
 
 ## Processing
 
