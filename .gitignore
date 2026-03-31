@@ -26,6 +26,9 @@ AI_Employee_Vault/Plans/
 .coverage
 htmlcov/
 
+# Claude Code — local settings (personal, not shared)
+.claude/settings.local.json
+
 # Editor
 .vscode/
 .idea/
