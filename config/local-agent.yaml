@@ -21,5 +21,5 @@ model_config:
   complex: claude-opus-4-6
   fallback: minimax:m2.5:cloud
 
-vault_path: ~/vault
+vault_path: AI_Employee_Vault
 poll_interval: 60
