@@ -192,6 +192,7 @@ class CloudOrchestrator:
         try:
             result = subprocess.run(
                 cmd, capture_output=True, text=True,
+                stdin=subprocess.DEVNULL,
                 timeout=self._claude_timeout, cwd=str(project_root), env=env,
             )
             if result.returncode == 0:
