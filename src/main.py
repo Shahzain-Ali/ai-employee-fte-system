@@ -65,6 +65,13 @@ def _run_setup():
 
 def _run_system():
     """Start watchers and orchestrator."""
+    agent_mode = os.getenv("AGENT_MODE", "local")
+
+    # Cloud mode — draft-only orchestrator, no watchers/approval needed
+    if agent_mode == "cloud":
+        _run_cloud_system()
+        return
+
     from src.watchers.filesystem_watcher import FilesystemWatcher
     from src.orchestrator.orchestrator import Orchestrator
     from src.orchestrator.approval_watcher import ApprovalWatcher
@@ -80,7 +87,7 @@ def _run_system():
     poll_interval = int(os.getenv("POLL_INTERVAL", "60"))
     dry_run = os.getenv("DRY_RUN", "true").lower() == "true"
 
-    print(f"Starting AI Employee system...")
+    print(f"Starting AI Employee system (LOCAL mode)...")
     print(f"  Vault: {vault_path.resolve()}")
     print(f"  Poll interval: {poll_interval}s")
     print(f"  Dry run: {dry_run}")
@@ -128,6 +135,41 @@ def _run_system():
 
     # Start orchestrator (blocking)
     orchestrator = Orchestrator(vault_path=vault_path, dry_run=dry_run)
+    orchestrator.run()
+
+
+def _run_cloud_system():
+    """Start Cloud Agent — draft-only mode, no WhatsApp/approval watchers."""
+    from src.orchestrator.cloud_orchestrator import CloudOrchestrator
+
+    vault_path = Path(os.getenv("VAULT_PATH", "AI_Employee_Vault"))
+    config_path = Path(os.getenv("CLOUD_CONFIG_PATH", "config/cloud-agent.yaml"))
+
+    if not vault_path.exists():
+        print(f"Vault not found at {vault_path}. Run 'python -m src.main setup' first.")
+        sys.exit(1)
+
+    print(f"Starting AI Employee system (CLOUD mode — draft only)...")
+    print(f"  Vault: {vault_path.resolve()}")
+    print(f"  Config: {config_path}")
+    print(f"  Poll interval: {os.getenv('POLL_INTERVAL', '60')}s")
+
+    # Start Gmail watcher in background thread (if credentials exist)
+    gmail_creds = os.getenv("GMAIL_CREDENTIALS_PATH")
+    if gmail_creds and Path(gmail_creds).exists():
+        from src.watchers.gmail_watcher import GmailWatcher
+
+        gmail = GmailWatcher(vault_path=vault_path)
+        gmail_thread = threading.Thread(target=gmail.start, daemon=True, name="gmail-watcher")
+        gmail_thread.start()
+        print("  Gmail Watcher: STARTED")
+    else:
+        print("  Gmail Watcher: SKIPPED (no credentials)")
+
+    print()
+
+    # Start cloud orchestrator (blocking) — draft-only, no send/publish
+    orchestrator = CloudOrchestrator(config_path=config_path, vault_path=vault_path)
     orchestrator.run()
 
 
