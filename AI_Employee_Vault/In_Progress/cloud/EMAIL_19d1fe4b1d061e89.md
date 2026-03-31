@@ -45,9 +45,48 @@ John
 
 ## Suggested Actions
 
-- [ ] Draft reply
+- [x] Draft reply
 - [ ] Forward to relevant contact
 - [ ] Archive (no action needed)
+
+## Draft Reply
+
+**To**: shahzainalii859@gmail.com
+**Subject**: Re: Invoice Request - AI Automation Project — Invoice #{pending_invoice_name}
+**Attachment**: Invoice PDF (to be generated from Odoo)
+
+---
+
+Dear John,
+
+Thank you for your request. Please find the attached invoice for your review.
+
+Invoice #: {pending — to be generated via Odoo}
+Total Amount: $5,000.00
+Due Date: April 30, 2026
+
+Should you have any questions or require modifications, please do not hesitate to reach out.
+
+Best regards,
+Accounts Team
+
+---
+
+### Cross-Domain Actions Required (when approved to send)
+
+1. **Odoo — Create Invoice**:
+   - Partner: Tech Solutions Inc.
+   - Line items: `[{"description": "AI Automation Project", "price_unit": 5000}]`
+   - Due date: 2026-04-30
+   - Currency: USD
+2. **Odoo — Download Invoice PDF**: Use `get_invoice_pdf` with created invoice ID
+3. **Email — Send Reply**: Use `send_email_tool` with PDF attachment
+4. **WhatsApp — Notify Accounts Team**: Invoice created notification
+
+### Approval Status
+
+- **Invoice creation + email reply**: AUTO-APPROVED (per Company Handbook — draft invoice only, no money moves)
+- **WhatsApp notification**: AUTO-APPROVED (notification only)
 
 ## Processing
 
