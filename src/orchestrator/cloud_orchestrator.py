@@ -13,7 +13,7 @@ from src.orchestrator.vault_manager import (
     claim_task, list_tasks_by_folder, read_task_frontmatter,
     move_task, write_status_update,
 )
-from src.orchestrator.model_selector import select_model
+from src.orchestrator.model_selector import load_model_config, select_model
 from src.utils.logger import AuditLogger, LogEntry
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,10 @@ class CloudOrchestrator:
         self._drafts_this_hour: list[float] = []
         rate_limits = self.config.get("rate_limits", {})
         self._max_drafts_per_hour = rate_limits.get("max_drafts_per_hour", 20)
+
+        # Retry tracking — after 3 fails, switch to fallback model
+        self._retry_counts: dict[str, int] = {}
+        self._max_retries_before_fallback = 3
 
     def _load_config(self) -> dict:
         """Load agent configuration from YAML."""
@@ -129,17 +133,30 @@ class CloudOrchestrator:
         task_content = claimed.read_text(encoding="utf-8")
         task_type = frontmatter.get("type", "")
 
-        model = select_model(
-            self.config_path,
-            task_type=task_type,
-            task_content=task_content,
-            skip_quota_check=True,
-        )
+        # Check retry count — after 3 fails, switch to fallback model
+        retry_count = self._retry_counts.get(task_file.name, 0)
+
+        if retry_count >= self._max_retries_before_fallback:
+            model_config = load_model_config(self.config_path)
+            model = model_config.get("fallback", "minimax:m2.5:cloud")
+            logger.warning(
+                "Task %s failed %d times — switching to fallback model: %s",
+                task_file.name, retry_count, model,
+            )
+        else:
+            model = select_model(
+                self.config_path,
+                task_type=task_type,
+                task_content=task_content,
+                skip_quota_check=True,
+            )
 
         # Invoke Claude Code to create draft
         success = self._invoke_claude_draft(claimed, domain, model)
 
         if success:
+            # Reset retry count on success
+            self._retry_counts.pop(task_file.name, None)
             # Move to Pending_Approval/<domain>/
             new_path = move_task(self.vault_path, claimed, "Pending_Approval", subfolder=domain)
             self._actions_since_update.append(
@@ -155,10 +172,15 @@ class CloudOrchestrator:
                 details={"model": model, "domain": domain},
             ))
         else:
+            # Increment retry count
+            self._retry_counts[task_file.name] = retry_count + 1
+            logger.warning(
+                "Draft failed for %s (attempt %d/%d)",
+                task_file.name, retry_count + 1, self._max_retries_before_fallback,
+            )
             # Move back to Needs_Action/<domain>/ for retry on next poll
             try:
                 move_task(self.vault_path, claimed, "Needs_Action", subfolder=domain)
-                logger.warning("Draft failed — moved %s back to Needs_Action/%s for retry", claimed.name, domain)
             except Exception as e:
                 logger.error("Failed to move %s back to Needs_Action: %s", claimed.name, e)
 
