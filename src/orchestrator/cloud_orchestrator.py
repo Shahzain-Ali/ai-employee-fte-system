@@ -155,8 +155,12 @@ class CloudOrchestrator:
                 details={"model": model, "domain": domain},
             ))
         else:
-            # Leave in In_Progress/cloud/ for retry
-            logger.error("Failed to draft %s — will retry", claimed.name)
+            # Move back to Needs_Action/<domain>/ for retry on next poll
+            try:
+                move_task(self.vault_path, claimed, "Needs_Action", subfolder=domain)
+                logger.warning("Draft failed — moved %s back to Needs_Action/%s for retry", claimed.name, domain)
+            except Exception as e:
+                logger.error("Failed to move %s back to Needs_Action: %s", claimed.name, e)
 
     def _invoke_claude_draft(self, task_file: Path, domain: str, model: str) -> bool:
         """Invoke Claude Code CLI to create a draft for the task.
