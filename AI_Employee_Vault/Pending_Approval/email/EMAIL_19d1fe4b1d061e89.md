@@ -15,7 +15,7 @@ labels:
 - INBOX
 message_id: 19d1fe4b1d061e89
 skill: email_responder
-status: in_progress
+status: pending_approval
 subject: Invoice Request - AI Automation Project
 thread_id: 19d1fe4b1d061e89
 to: alishahzain604@gmail.com
