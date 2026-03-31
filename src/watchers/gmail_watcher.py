@@ -181,7 +181,7 @@ class GmailWatcher(BaseWatcher):
         self._service = None
         self._running = False
         self._audit = AuditLogger(vault_path=vault_path)
-        self._needs_action = self.vault_path / "Needs_Action"
+        self._needs_action = self.vault_path / "Needs_Action" / "email"
 
     def _build_service(self):
         """Initialize Gmail API service."""
@@ -254,7 +254,7 @@ class GmailWatcher(BaseWatcher):
             action_path = self._needs_action / f"EMAIL_{msg_id}.md"
             if action_path.exists():
                 continue
-            if (self.vault_path / "Done" / f"EMAIL_{msg_id}.md").exists():
+            if (self.vault_path / "Done" / "email" / f"EMAIL_{msg_id}.md").exists():
                 continue
 
             try:
@@ -374,7 +374,7 @@ class GmailWatcher(BaseWatcher):
             action_type="email_detected",
             source="gmail_watcher",
             status="success",
-            target_file=f"Needs_Action/EMAIL_{message_id}.md",
+            target_file=f"Needs_Action/email/EMAIL_{message_id}.md",
             details={
                 "from": from_email,
                 "subject": subject,
@@ -429,8 +429,8 @@ class GmailWatcher(BaseWatcher):
         body_preview: str,
         attachments: list[str],
     ) -> Path:
-        """Create EMAIL_{id}.md action file in Needs_Action/."""
-        self._needs_action.mkdir(exist_ok=True)
+        """Create EMAIL_{id}.md action file in Needs_Action/email/."""
+        self._needs_action.mkdir(parents=True, exist_ok=True)
         action_path = self._needs_action / f"EMAIL_{message_id}.md"
 
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

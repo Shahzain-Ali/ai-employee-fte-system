@@ -81,7 +81,7 @@ class Orchestrator:
         self._trigger_claude(file_to_process)
 
     def _get_pending_files(self) -> list[Path]:
-        """Return all actionable .md files in Needs_Action/, sorted oldest first.
+        """Return all actionable .md files in Needs_Action/ and subfolders, sorted oldest first.
 
         Includes: FILE_*.md (Bronze), EMAIL_*.md (Silver), WA_*.md (Silver).
         Excludes: REJECTED_*.md files.
@@ -90,12 +90,21 @@ class Orchestrator:
             return []
 
         prefixes = ("FILE_", "EMAIL_", "WA_", "ODOO_", "FB_", "IG_", "TW_", "LI_")
-        files = [
-            f for f in self._needs_action.iterdir()
-            if f.is_file()
-            and f.suffix == ".md"
-            and any(f.name.startswith(p) for p in prefixes)
-        ]
+        files = []
+
+        # Scan root Needs_Action/
+        for f in self._needs_action.iterdir():
+            if f.is_file() and f.suffix == ".md" and any(f.name.startswith(p) for p in prefixes):
+                files.append(f)
+
+        # Scan subfolders (email, social, invoice, general)
+        for subfolder in ["email", "social", "invoice", "general"]:
+            subfolder_path = self._needs_action / subfolder
+            if subfolder_path.exists() and subfolder_path.is_dir():
+                for f in subfolder_path.iterdir():
+                    if f.is_file() and f.suffix == ".md" and any(f.name.startswith(p) for p in prefixes):
+                        files.append(f)
+
         # Sort by creation/modification time — oldest first
         files.sort(key=lambda f: f.stat().st_mtime)
         return files
