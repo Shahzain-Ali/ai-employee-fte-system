@@ -311,9 +311,34 @@ class GmailWatcher(BaseWatcher):
         labels = msg.get("labelIds", [])
         snippet = msg.get("snippet", "")
 
+        # Skip non-primary categories (Promotions, Social, Updates, Forums)
+        SKIP_CATEGORIES = {"CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_UPDATES", "CATEGORY_FORUMS"}
+        if SKIP_CATEGORIES.intersection(labels):
+            logger.debug("Skipping non-primary email: %s (labels: %s)", subject[:50], labels)
+            try:
+                self._service.users().messages().modify(
+                    userId="me", id=message_id,
+                    body={"removeLabelIds": ["UNREAD"]},
+                ).execute()
+            except Exception:
+                pass
+            return None
+
         # Extract body text
         body = self._extract_body(msg["payload"])
         body_preview = body[:500] if body else snippet
+
+        # Skip promotional emails — real people don't have "unsubscribe" in their emails
+        if body and "unsubscribe" in body.lower():
+            logger.debug("Skipping promotional email (has unsubscribe): %s", subject[:50])
+            try:
+                self._service.users().messages().modify(
+                    userId="me", id=message_id,
+                    body={"removeLabelIds": ["UNREAD"]},
+                ).execute()
+            except Exception:
+                pass
+            return None
 
         # Check for attachments
         attachments = self._extract_attachment_names(msg["payload"])
