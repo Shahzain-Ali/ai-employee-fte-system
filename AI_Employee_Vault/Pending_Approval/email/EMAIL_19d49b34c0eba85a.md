@@ -16,7 +16,7 @@ labels:
 - INBOX
 message_id: 19d49b34c0eba85a
 skill: email_responder
-status: in_progress
+status: pending_approval
 subject: "Invoice Request for AI Automation Services \u2014 Agentive Solutions"
 thread_id: 19d49b34c0eba85a
 to: alishahzain604@gmail.com
