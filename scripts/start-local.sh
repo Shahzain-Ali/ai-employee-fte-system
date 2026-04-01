@@ -17,6 +17,9 @@ if [ -f "$PROJECT_DIR/.env" ]; then
     set +a
 fi
 
+# Start cron service (needed for auto git pull)
+sudo service cron start 2>/dev/null || true
+
 # Pull latest from GitHub
 echo "Pulling latest code..." | tee -a "$LOG"
 cd "$PROJECT_DIR" && git pull --rebase origin main 2>&1 | tee -a "$LOG" || true
