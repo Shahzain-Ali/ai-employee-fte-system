@@ -16,7 +16,7 @@ labels:
 - INBOX
 message_id: 19d45dcd95ca2b51
 skill: email_responder
-status: in_progress
+status: pending_approval
 subject: Meeting Request - Project Review
 thread_id: 19d45dcd95ca2b51
 to: alishahzain604@gmail.com
