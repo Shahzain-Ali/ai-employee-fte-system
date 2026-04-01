@@ -73,3 +73,41 @@ Use the `email_responder` skill as defined in `.claude/skills/email_responder.md
 6. Move to `Done/`
 7. Update `Dashboard.md`
 8. Write log entry to `Logs/2026-04-01.json`
+
+## Draft Reply
+
+> **Status**: DRAFT — Not sent. Pending invoice creation in Odoo.
+> **Action Required**: Run full workflow to create invoice via `mcp__fte-odoo__create_invoice`, fetch PDF, then send via `mcp__fte-email__send_email_tool`.
+> **Approval**: AUTO-APPROVED (invoice confirmation email per Company Handbook)
+
+---
+
+**To**: shahzainalii859@gmail.com
+**Subject**: Re: Invoice Request for AI Automation Services — Agentive Solutions — Invoice #{INVOICE_NUMBER}
+
+---
+
+Dear Shahzain Ali,
+
+Thank you for your request. Please find the attached invoice for your review.
+
+Invoice #: {INVOICE_NUMBER}
+Total Amount: PKR 15,000
+Due Date: 2026-05-01
+
+Should you have any questions or require modifications, please do not hesitate to reach out.
+
+Best regards,
+Accounts Team
+
+---
+
+> **Extracted Invoice Data** (for Odoo creation):
+> - `partner_name`: Ali Hassan — GIAIC, Karachi
+> - `line_items`: [{"description": "AI Employee / Workflow Automation Setup", "price_unit": 15000}]
+> - `due_date`: 2026-05-01
+> - `invoice_date`: 2026-04-01
+>
+> **WhatsApp Notification** (after send):
+> Contact: Accounts Team
+> Message: "✅ Invoice Created\nClient: Ali Hassan — GIAIC, Karachi\nAmount: PKR 15,000\nInvoice #: {INVOICE_NUMBER}\nEmail sent with PDF attached."
