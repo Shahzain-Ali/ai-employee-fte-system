@@ -16,7 +16,7 @@ labels:
 - INBOX
 message_id: 19d49e13fa2d997e
 skill: email_responder
-status: in_progress
+status: pending_approval
 subject: Urgent Support Request - System Down
 thread_id: 19d49e13fa2d997e
 to: alishahzain604@gmail.com
@@ -55,3 +55,32 @@ Use the `email_responder` skill as defined in `.claude/skills/email_responder.md
 6. Move to `Done/`
 7. Update `Dashboard.md`
 8. Write log entry to `Logs/2026-04-01.json`
+
+## Draft Reply
+
+**Analysis:**
+- **Sender**: Shahzain Ali <shahzainalii859@gmail.com> — external/unknown contact
+- **Urgency**: HIGH — production system down, 500 errors
+- **Cross-domain trigger**: None detected (no invoice/billing keywords)
+- **Action**: Regular reply required → **REQUIRES APPROVAL** (external sender, non-invoice)
+- **Approval file**: Must be created in `Pending_Approval/` before sending
+
+---
+
+**To**: shahzainalii859@gmail.com
+**Subject**: Re: Urgent Support Request - System Down
+
+Dear Shahzain,
+
+Thank you for reaching out. We have received your message regarding the production system outage and the 500 errors you are experiencing on the dashboard.
+
+Our technical team has been notified and is investigating the issue with high priority. We will provide you with an update as soon as we have more information or a resolution.
+
+We apologize for the inconvenience and appreciate your patience.
+
+Best regards,
+Support Team
+
+---
+
+**⚠️ Approval Required**: This reply is to an external/unknown sender. An approval file must be created in `Pending_Approval/` before this draft is sent.
