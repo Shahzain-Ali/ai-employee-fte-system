@@ -16,8 +16,8 @@ COMPLEX_KEYWORDS = [
 
 # Task types that are always routine (Sonnet)
 ROUTINE_TYPES = [
-    "email_reply", "triage", "social_post", "status_update",
-    "simple_draft", "acknowledgment", "schedule",
+    "email", "email_reply", "triage", "social_post", "status_update",
+    "simple_draft", "acknowledgment", "schedule", "social", "invoice",
 ]
 
 

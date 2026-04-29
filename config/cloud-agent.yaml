@@ -26,7 +26,7 @@ model_config:
   complex: claude-opus-4-6
   fallback: minimax:m2.5:cloud
 
-vault_path: /home/ubuntu/vault
+vault_path: /home/ubuntu/fte-project/AI_Employee_Vault
 poll_interval: 60
 status_update_interval: 1800  # 30 minutes
 

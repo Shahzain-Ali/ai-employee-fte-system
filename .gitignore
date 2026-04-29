@@ -11,17 +11,23 @@ __pycache__/
 dist/
 build/
 
-# Vault data — contains personal data (emails, messages, approvals)
+# Vault — keep handbook & dashboard (showcase), ignore everything else
+AI_Employee_Vault/.obsidian/
 AI_Employee_Vault/Inbox/
 AI_Employee_Vault/Done/
 AI_Employee_Vault/Briefings/
 AI_Employee_Vault/Tasks/
 AI_Employee_Vault/Logs/
+AI_Employee_Vault/Needs_Action/
+AI_Employee_Vault/Plans/
 
 # Test artifacts
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Claude Code — local settings (personal, not shared)
+.claude/settings.local.json
 
 # Editor
 .vscode/
@@ -40,6 +46,12 @@ node_modules/
 
 # Platinum Tier — vault is a separate private repo
 vault/
+
+# Learning & reference material — local only, not for repo
+docs/
+Learning/
+Setup_Videos/
+*.pdf
 
 # OS
 .DS_Store

@@ -35,36 +35,13 @@ ODOO_PASSWORD = os.getenv("ODOO_PASSWORD", "")
 # Docker compose file path
 COMPOSE_FILE = Path(__file__).resolve().parent.parent.parent / "config" / "docker-compose.yml"
 
-# Idle timeout - MCP server will exit after this many seconds of inactivity
-IDLE_TIMEOUT = int(os.getenv("MCP_IDLE_TIMEOUT", "30"))
-
 _uid_cache: int | None = None
 _docker_started_by_us: bool = False
-_last_request_time: float = 0
-_server_running: bool = True
 
 
 def _update_activity() -> None:
-    """Update last request timestamp."""
-    global _last_request_time
-    _last_request_time = time.time()
-
-
-def _check_idle_timeout() -> bool:
-    """Check if server has been idle too long. Returns True if should exit."""
-    global _server_running
-    if not _server_running:
-        return True
-
-    if _last_request_time == 0:
-        return False
-
-    idle_time = time.time() - _last_request_time
-    if idle_time > IDLE_TIMEOUT:
-        logger.info(f"Idle timeout reached ({idle_time:.0f}s > {IDLE_TIMEOUT}s). Shutting down MCP server...")
-        _server_running = False
-        return True
-    return False
+    """Log that an MCP tool was called (for debugging)."""
+    logger.debug("MCP tool called at %s", datetime.now(timezone.utc).isoformat())
 
 
 def _is_odoo_reachable() -> bool:
@@ -123,19 +100,6 @@ def _stop_odoo_containers() -> None:
 
 # Auto-stop containers when MCP server exits
 atexit.register(_stop_odoo_containers)
-
-
-def _check_idle_and_exit() -> None:
-    """Background thread: exit if idle for IDLE_TIMEOUT seconds."""
-    while _server_running:
-        time.sleep(5)  # Check every 5 seconds
-        if _last_request_time > 0 and _server_running:
-            idle_time = time.time() - _last_request_time
-            if idle_time > IDLE_TIMEOUT:
-                logger.info(f"Idle timeout reached ({IDLE_TIMEOUT}s) — shutting down MCP server...")
-                global _docker_started_by_us
-                _stop_odoo_containers()
-                os._exit(0)
 
 
 def _signal_handler(signum, frame):
@@ -284,6 +248,78 @@ def create_invoice(partner_name: str, lines: list[dict], due_date: str = "") -> 
     except Exception as e:
         logger.error("create_invoice failed: %s", e)
         return f"Error creating invoice: {e}"
+
+
+@mcp.tool()
+def get_invoice_pdf(invoice_id: int) -> str:
+    """Download invoice PDF from Odoo and return the local file path.
+
+    Args:
+        invoice_id: Odoo invoice ID (account.move).
+
+    Returns:
+        Local file path where PDF is saved, or error message.
+    """
+    _update_activity()
+    try:
+        uid = _authenticate()
+
+        # Get invoice name for filename
+        invoice = _execute_kw("account.move", "read", [[invoice_id]],
+                              {"fields": ["name", "partner_id", "amount_total"]})
+        if not invoice:
+            return f"Error: Invoice ID {invoice_id} not found"
+
+        inv = invoice[0]
+        raw_name = inv.get("name")
+        inv_name = (raw_name if isinstance(raw_name, str) else f"INV-{invoice_id}").replace("/", "-")
+
+        # Confirm draft invoice so it gets a proper number and PDF can generate
+        state = inv.get("state", "draft")
+        if state == "draft":
+            _execute_kw("account.move", "action_post", [[invoice_id]])
+            # Re-read to get the assigned invoice number
+            invoice = _execute_kw("account.move", "read", [[invoice_id]],
+                                  {"fields": ["name"]})
+            if invoice:
+                new_name = invoice[0].get("name")
+                if isinstance(new_name, str):
+                    inv_name = new_name.replace("/", "-")
+
+        # Download PDF via Odoo report endpoint
+        session = requests.Session()
+        # Login to get session cookie
+        login_resp = session.post(f"{ODOO_URL}/web/session/authenticate", json={
+            "jsonrpc": "2.0",
+            "params": {
+                "db": ODOO_DB,
+                "login": ODOO_USER,
+                "password": ODOO_PASSWORD,
+            }
+        }, timeout=10)
+
+        if login_resp.status_code != 200:
+            return f"Error: Could not authenticate with Odoo web"
+
+        # Download PDF report
+        pdf_url = f"{ODOO_URL}/report/pdf/account.report_invoice/{invoice_id}"
+        pdf_resp = session.get(pdf_url, timeout=30)
+
+        if pdf_resp.status_code != 200:
+            return f"Error: Could not download PDF (status {pdf_resp.status_code})"
+
+        # Save to temp directory
+        import tempfile
+        pdf_dir = Path(tempfile.gettempdir()) / "fte_invoices"
+        pdf_dir.mkdir(exist_ok=True)
+        pdf_path = pdf_dir / f"{inv_name}.pdf"
+        pdf_path.write_bytes(pdf_resp.content)
+
+        logger.info("Invoice PDF saved: %s (%d bytes)", pdf_path, len(pdf_resp.content))
+        return str(pdf_path)
+    except Exception as e:
+        logger.error("get_invoice_pdf failed: %s", e)
+        return f"Error downloading invoice PDF: {e}"
 
 
 @mcp.tool()
@@ -488,12 +524,47 @@ def create_expense(description: str, amount: float, category: str = "", date: st
         return f"Error creating expense: {e}"
 
 
-if __name__ == "__main__":
-    # Start idle monitor thread
-    import threading
-    idle_thread = threading.Thread(target=_check_idle_and_exit, daemon=True)
-    idle_thread.start()
+@mcp.tool()
+def delete_invoice(invoice_id: int) -> str:
+    """Delete an invoice from Odoo by ID.
 
+    Posted invoices are first reset to draft, then permanently deleted.
+
+    Args:
+        invoice_id: The numeric Odoo invoice ID to delete.
+    """
+    _update_activity()
+    try:
+        _ensure_odoo_running()
+
+        # Fetch invoice to confirm it exists
+        invoices = _execute_kw("account.move", "read", [[invoice_id]],
+                               {"fields": ["name", "partner_id", "state", "amount_total"]})
+        if not invoices:
+            return f"Invoice ID={invoice_id} not found."
+
+        inv = invoices[0]
+        name = inv.get("name") or f"ID={invoice_id}"
+        partner = inv.get("partner_id", [None, "Unknown"])[1]
+        state = inv.get("state", "")
+
+        # Posted invoices must be reset to draft before deletion
+        if state == "posted":
+            _execute_kw("account.move", "button_draft", [[invoice_id]])
+            logger.info("Reset invoice %s to draft for deletion", name)
+
+        # Permanently delete
+        _execute_kw("account.move", "unlink", [[invoice_id]])
+        logger.info("Deleted invoice %s (partner: %s)", name, partner)
+
+        return f"Invoice {name} (partner: {partner}) permanently deleted from Odoo."
+
+    except Exception as e:
+        logger.error("delete_invoice failed: %s", e)
+        return f"Error deleting invoice: {e}"
+
+
+if __name__ == "__main__":
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGTERM, _signal_handler)
     signal.signal(signal.SIGINT, _signal_handler)

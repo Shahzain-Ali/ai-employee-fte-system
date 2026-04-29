@@ -27,7 +27,7 @@ An autonomous AI agent that manages your personal and business affairs 24/7. It 
 6. [Running the System](#running-the-system)
    - [All Commands](#all-commands)
 7. [Dashboard](#dashboard)
-8. [MCP Servers (28 Tools)](#mcp-servers-28-tools)
+8. [MCP Servers (31 Tools)](#mcp-servers-31-tools)
 9. [Agent Skills (17 Skills)](#agent-skills-17-skills)
 10. [Security](#security)
 11. [Tier Checklist](#tier-checklist)
@@ -104,16 +104,17 @@ The system follows a **Perception → Reasoning → Action** pipeline:
 └─────────┬────────────────────────────────┬───────────────────┘
           ▼                                ▼
 ┌───────────────────────┐   ┌──────────────────────────────────┐
-│  HUMAN-IN-THE-LOOP    │   │  ACTION LAYER (6 MCP Servers)    │
+│  HUMAN-IN-THE-LOOP    │   │  ACTION LAYER (7 MCP Servers)    │
 │                       │   │                                  │
 │  Review in Obsidian   │──>│  fte-email     (2 tools)         │
-│  Move to /Approved/   │   │  fte-odoo      (6 tools)         │
+│  Move to /Approved/   │   │  fte-odoo      (8 tools)         │
 │  or /Rejected/        │   │  fte-facebook  (5 tools)         │
 └───────────────────────┘   │  fte-instagram (6 tools)         │
                             │  fte-twitter   (4 tools)         │
                             │  fte-linkedin  (5 tools)         │
+                            │  fte-whatsapp  (1 tool)          │
                             │                                  │
-                            │  Total: 28 tools                 │
+                            │  Total: 31 tools                 │
                             └──────────────────────────────────┘
                                            │
                                            ▼
@@ -347,9 +348,9 @@ Streamlit web dashboard with 7 sections:
 
 ---
 
-## MCP Servers (28 Tools)
+## MCP Servers (31 Tools)
 
-6 MCP servers configured in `.mcp.json`:
+7 MCP servers configured in `.mcp.json`:
 
 ### fte-email — Node.js (`src/mcp/index.js`)
 | Tool | Description |
@@ -362,10 +363,12 @@ Streamlit web dashboard with 7 sections:
 |------|-------------|
 | `create_invoice` | Create draft invoice in Odoo |
 | `get_invoices` | List invoices with filters |
+| `get_invoice_pdf` | Download invoice as PDF |
 | `mark_payment_received` | Record payment on invoice |
 | `get_weekly_summary` | Revenue, expenses, outstanding balance |
 | `get_expenses` | List expense records |
 | `create_expense` | Create new expense entry |
+| `delete_invoice` | Delete a draft invoice |
 
 ### fte-facebook — Python (`src/mcp/facebook_server.py`)
 | Tool | Description |
@@ -402,6 +405,11 @@ Streamlit web dashboard with 7 sections:
 | `get_linkedin_profile` | Get profile information |
 | `comment_on_linkedin_post` | Comment on a post |
 | `like_linkedin_post` | Like a post |
+
+### fte-whatsapp — Python (`src/mcp/whatsapp_server.py`)
+| Tool | Description |
+|------|-------------|
+| `send_whatsapp_message` | Send a WhatsApp message via Playwright |
 
 ---
 
@@ -482,12 +490,12 @@ Set `DRY_RUN=true` in `.env` — all actions are logged but not executed.
 ### Gold Tier: Autonomous Employee ✅
 - [x] All Silver requirements
 - [x] Cross-domain integration with UUID workflow tracking (`src/orchestrator/workflow_engine.py`)
-- [x] Odoo Community (Docker) + JSON-RPC MCP server — 6 tools (`src/mcp/odoo_server.py`)
+- [x] Odoo Community (Docker) + JSON-RPC MCP server — 8 tools (`src/mcp/odoo_server.py`)
 - [x] Facebook integration — 5 MCP tools (`src/mcp/facebook_server.py`)
 - [x] Instagram integration — 6 MCP tools including reels (`src/mcp/instagram_server.py`)
 - [x] Twitter/X integration — 4 MCP tools via Playwright (`src/mcp/twitter_server.py`)
 - [x] LinkedIn integration — 5 MCP tools (`src/mcp/linkedin_server.py`)
-- [x] 6 MCP servers, 28 total tools (configured in `.mcp.json`)
+- [x] 7 MCP servers, 31 total tools (configured in `.mcp.json`)
 - [x] Weekly CEO Briefing with PDF export + email delivery (`src/utils/ceo_briefing.py`)
 - [x] Error recovery with exponential backoff (`src/utils/retry.py`)
 - [x] Comprehensive audit logging with 90-day retention (`src/utils/logger.py`)
@@ -553,7 +561,7 @@ full-time-equivalent-project/
 │   ├── mcp/
 │   │   ├── index.js                # fte-email (Node.js)
 │   │   ├── email_server.py         # fte-email (Python backup)
-│   │   ├── odoo_server.py          # fte-odoo (6 tools)
+│   │   ├── odoo_server.py          # fte-odoo (8 tools)
 │   │   ├── facebook_server.py      # fte-facebook (5 tools)
 │   │   ├── instagram_server.py     # fte-instagram (6 tools)
 │   │   ├── twitter_server.py       # fte-twitter (4 tools)
@@ -638,7 +646,7 @@ full-time-equivalent-project/
 
 | Error | Solution |
 |-------|----------|
-| MCP server won't connect | Check `.mcp.json` exists with all 6 servers configured |
+| MCP server won't connect | Check `.mcp.json` exists with all 7 servers configured |
 | Email MCP fails | Run `cd src/mcp && node index.js` to test standalone |
 | Facebook/Instagram API error | Verify `FB_PAGE_ACCESS_TOKEN` and `IG_ACCESS_TOKEN` in `.env` are valid |
 

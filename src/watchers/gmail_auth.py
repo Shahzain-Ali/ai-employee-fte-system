@@ -77,6 +77,14 @@ def get_gmail_credentials(
             creds = None
 
     if not creds or not creds.valid:
+        # On headless servers (cloud), browser auth is not possible
+        # Token must be created locally and copied to cloud
+        if os.getenv("AGENT_MODE") == "cloud":
+            raise RuntimeError(
+                "Gmail token expired/missing on cloud (headless — no browser). "
+                "Fix: run 'python -m src.main gmail --authorize' locally, "
+                "then copy .secrets/gmail_token.json to cloud."
+            )
         logger.info("Starting Gmail OAuth2 authorization flow...")
         flow = InstalledAppFlow.from_client_secrets_file(
             str(credentials_file), SCOPES

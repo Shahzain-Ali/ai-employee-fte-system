@@ -46,9 +46,15 @@ def send_whatsapp_reply(
 
     try:
         headless = os.getenv("WHATSAPP_HEADLESS", "false").lower() == "true"
+        # Use real Chrome user-agent to prevent WhatsApp blocking headless browsers
+        chrome_ua = (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+        )
         context = pw.chromium.launch_persistent_context(
             user_data_dir=str(session),
             headless=headless,
+            user_agent=chrome_ua,
             args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
         )
         stealth = Stealth()
@@ -59,17 +65,27 @@ def send_whatsapp_reply(
 
         # Navigate to WhatsApp Web
         page.goto(WHATSAPP_URL, wait_until="domcontentloaded", timeout=60000)
+        # Wait for WhatsApp to fully load (chat list appears when logged in)
         try:
-            page.wait_for_selector('[aria-label="Chat list"]', timeout=30000)
+            page.wait_for_selector('[aria-label="Chat list"]', timeout=60000)
+            logger.info("WhatsApp Web loaded — chat list visible")
+        except Exception:
+            logger.warning("Chat list not found — WhatsApp may need QR scan")
+        time.sleep(3)
+
+        # Reload to sync latest contacts (first load may show cached/numbers only)
+        page.reload(wait_until="domcontentloaded", timeout=60000)
+        try:
+            page.wait_for_selector('[aria-label="Chat list"]', timeout=60000)
+            logger.info("WhatsApp Web reloaded — contacts synced")
         except Exception:
             pass
         time.sleep(5)
-        logger.info("WhatsApp Web loaded")
 
         # Search for the contact
         search_box = page.wait_for_selector(
-            '[aria-label="Search input textbox"]',
-            timeout=10000,
+            '[aria-label="Search or start a new chat"]',
+            timeout=30000,
         )
         if not search_box:
             raise RuntimeError("Could not find WhatsApp search box")

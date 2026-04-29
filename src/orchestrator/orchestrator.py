@@ -1,4 +1,9 @@
-"""Orchestrator — polls Needs_Action/ and triggers Claude Code for processing."""
+"""Orchestrator — polls Needs_Action/ and triggers Claude Code for processing.
+
+Includes automatic fallback to alternate model after repeated failures.
+When Claude Code hits rate limits or errors 5 times for the same file,
+the orchestrator switches to a fallback model (minimax-m2.5:cloud).
+"""
 import os
 import re
 import time
@@ -11,6 +16,7 @@ from datetime import datetime, timezone
 
 from src.utils.logger import AuditLogger, LogEntry
 from src.utils.dashboard import update_dashboard
+from src.orchestrator.model_selector import load_model_config, select_model
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +37,15 @@ class Orchestrator:
         self._running = False
         self._poll_interval = int(os.getenv("POLL_INTERVAL", "60"))
         self._claude_timeout = int(os.getenv("CLAUDE_TIMEOUT", "300"))
+        self._max_retries = int(os.getenv("MAX_RETRIES", "5"))
         self._audit = AuditLogger(vault_path=vault_path)
+
+        # Retry tracking: filename → retry count
+        self._retry_counts: dict[str, int] = {}
+
+        # Load model config (fallback model for when Claude rate-limits)
+        config_path = Path(__file__).resolve().parent.parent.parent / "config" / "local-agent.yaml"
+        self._model_config = load_model_config(config_path)
 
     def run(self) -> None:
         """Start the polling loop. Blocks until stopped."""
@@ -57,11 +71,17 @@ class Orchestrator:
             return
 
         file_to_process = pending[0]
-        logger.info("Processing: %s", file_to_process.name)
+        retries = self._retry_counts.get(file_to_process.name, 0)
+        if retries > 0:
+            model_info = " [FALLBACK]" if retries >= self._max_retries else ""
+            logger.info("Processing: %s (retry %d/%d%s)",
+                        file_to_process.name, retries, self._max_retries, model_info)
+        else:
+            logger.info("Processing: %s", file_to_process.name)
         self._trigger_claude(file_to_process)
 
     def _get_pending_files(self) -> list[Path]:
-        """Return all actionable .md files in Needs_Action/, sorted oldest first.
+        """Return all actionable .md files in Needs_Action/ and subfolders, sorted oldest first.
 
         Includes: FILE_*.md (Bronze), EMAIL_*.md (Silver), WA_*.md (Silver).
         Excludes: REJECTED_*.md files.
@@ -70,12 +90,21 @@ class Orchestrator:
             return []
 
         prefixes = ("FILE_", "EMAIL_", "WA_", "ODOO_", "FB_", "IG_", "TW_", "LI_")
-        files = [
-            f for f in self._needs_action.iterdir()
-            if f.is_file()
-            and f.suffix == ".md"
-            and any(f.name.startswith(p) for p in prefixes)
-        ]
+        files = []
+
+        # Scan root Needs_Action/
+        for f in self._needs_action.iterdir():
+            if f.is_file() and f.suffix == ".md" and any(f.name.startswith(p) for p in prefixes):
+                files.append(f)
+
+        # Scan subfolders (email, social, invoice, general)
+        for subfolder in ["email", "social", "invoice", "general"]:
+            subfolder_path = self._needs_action / subfolder
+            if subfolder_path.exists() and subfolder_path.is_dir():
+                for f in subfolder_path.iterdir():
+                    if f.is_file() and f.suffix == ".md" and any(f.name.startswith(p) for p in prefixes):
+                        files.append(f)
+
         # Sort by creation/modification time — oldest first
         files.sort(key=lambda f: f.stat().st_mtime)
         return files
@@ -87,7 +116,8 @@ class Orchestrator:
         is created in Pending_Approval/ with empty reply section for the user.
 
         In dry_run mode, skips the subprocess call and moves the file directly.
-        On timeout or failure, leaves the file in Needs_Action/ for retry.
+        On timeout or failure, increments retry counter. After MAX_RETRIES
+        failures, switches to fallback model (e.g., minimax:m2.5:cloud via Ollama).
 
         Args:
             action_file: Path to the action file in Needs_Action/.
@@ -118,6 +148,26 @@ class Orchestrator:
             logger.info("Dashboard.md updated")
             return
 
+        # --- Retry tracking & model selection ---
+        fname = action_file.name
+        retries = self._retry_counts.get(fname, 0)
+        use_fallback = retries >= self._max_retries
+
+        if use_fallback:
+            # After max retries on Claude, switch to fallback (minimax via ollama)
+            model = self._model_config.get("fallback", "minimax-m2.5:cloud")
+            logger.warning(
+                "File %s failed %d times on Claude — switching to fallback model: %s",
+                fname, retries, model,
+            )
+        else:
+            # Primary: Claude Code (default model)
+            model = self._model_config.get("primary", "claude-sonnet-4-6")
+            logger.info(
+                "Using Claude model: %s (attempt %d/%d)",
+                model, retries + 1, self._max_retries,
+            )
+
         skill_name = self._resolve_skill(action_file)
         skill_path = Path(__file__).parent.parent.parent / ".claude" / "skills" / f"{skill_name}.md"
         plan_skill_path = Path(__file__).parent.parent.parent / ".claude" / "skills" / "plan_creator.md"
@@ -125,14 +175,17 @@ class Orchestrator:
             f"Read the skill instructions at {skill_path}. "
             f"Also read the plan_creator skill at {plan_skill_path}. "
             f"Then read the action file at {action_file} and execute every step in the skill. "
-            f"If the task requires multiple steps (2+), use PlanManager from src/utils/plan_manager.py "
-            f"to create a PLAN_*.md in Plans/ folder following the plan_creator skill instructions. "
+            f"CRITICAL: For multi-step tasks (2+), you MUST use PlanManager from src/utils/plan_manager.py. "
+            f"First call pm.create_plan() to create PLAN_*.md with all steps as [ ] (incomplete). "
+            f"Then execute each step ONE BY ONE — after completing each step, immediately call "
+            f"pm.mark_step_complete(plan_path, step_number, note='result details') to mark it [x]. "
+            f"Do NOT write the plan file manually. Do NOT mark all steps complete at once. "
             f"Write a markdown summary note to Done/SUMMARY_{action_file.stem}.md. "
             f"Update Dashboard.md and write a log entry to Logs/. "
             f"Do NOT move the action file — the orchestrator will handle that."
         )
 
-        cmd = ["claude", "--print", "--dangerously-skip-permissions", prompt]
+        cmd = self._build_cmd(prompt, model)
 
         # Remove CLAUDECODE so the subprocess doesn't fail with "nested session" error
         env = os.environ.copy()
@@ -149,33 +202,80 @@ class Orchestrator:
                 timeout=self._claude_timeout,
                 cwd=str(project_root),
                 env=env,
+                stdin=subprocess.DEVNULL,
             )
             if result.returncode == 0:
-                logger.info("Claude completed processing %s", action_file.name)
+                model_label = model or "default"
+                logger.info(
+                    "Claude completed processing %s (model=%s, retries=%d)",
+                    fname, model_label, retries,
+                )
+                # Success — clear retry counter
+                self._retry_counts.pop(fname, None)
                 if action_file.exists():
                     self._move_to_done(action_file)
                 self._audit.log(LogEntry(
                     action_type="processing_completed",
                     source="orchestrator",
                     status="success",
-                    target_file=f"Done/{action_file.name}",
+                    target_file=f"Done/{fname}",
+                    details={"model": model_label, "retries": retries},
                 ))
                 update_dashboard(self.vault_path)
                 logger.info("Dashboard.md updated")
             else:
+                self._retry_counts[fname] = retries + 1
+                model_label = model or "default"
                 logger.error(
-                    "Claude returned error for %s: %s",
-                    action_file.name,
+                    "Claude returned error for %s (model=%s, retry %d/%d): %s",
+                    fname, model_label,
+                    self._retry_counts[fname], self._max_retries,
                     result.stderr[:500],
                 )
+                self._audit.log(LogEntry(
+                    action_type="processing_failed",
+                    source="orchestrator",
+                    status="failure",
+                    target_file=str(action_file.relative_to(self.vault_path)),
+                    details={
+                        "model": model_label,
+                        "retry": self._retry_counts[fname],
+                        "max_retries": self._max_retries,
+                        "error": result.stderr[:300],
+                    },
+                ))
         except subprocess.TimeoutExpired:
+            self._retry_counts[fname] = retries + 1
             logger.error(
-                "Claude timed out after %ds for %s",
-                self._claude_timeout,
-                action_file.name,
+                "Claude timed out after %ds for %s (retry %d/%d)",
+                self._claude_timeout, fname,
+                self._retry_counts[fname], self._max_retries,
             )
         except FileNotFoundError:
             logger.error("Claude Code not found. Install with: npm install -g @anthropic-ai/claude-code")
+
+    def _build_cmd(self, prompt: str, model: str | None = None) -> list[str]:
+        """Build the Claude CLI command with optional model override.
+
+        Always includes --mcp-config to ensure MCP servers (fte-email,
+        fte-odoo, fte-whatsapp, etc.) are available in the subprocess.
+
+        Args:
+            prompt: The prompt to send to Claude.
+            model: Optional model identifier. If None, uses Claude default.
+
+        Returns:
+            Command list for subprocess.run().
+        """
+        project_root = Path(__file__).resolve().parent.parent.parent
+        mcp_config = str(project_root / ".mcp.json")
+
+        cmd = ["claude", "--print", "--dangerously-skip-permissions",
+               "--mcp-config", mcp_config]
+        if model:
+            cmd.extend(["--model", model])
+        cmd.append(prompt)
+        return cmd
 
     def _create_whatsapp_approval(self, action_file: Path) -> None:
         """Create an approval file for WhatsApp reply in Pending_Approval/.
